@@ -8,6 +8,7 @@ import (
 
 type OTPService interface {
 	Send(ctx context.Context, phone string) error
+	Verify(ctx context.Context, phone, code string) error
 }
 
 type OTPHandler struct {
@@ -41,9 +42,39 @@ func (h *OTPHandler) Send(
 
 	ctx := r.Context()
 	if err := h.src.Send(ctx, req.Phone); err != nil {
-		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
 
 	writeJSON(w, http.StatusOK, &sendResponse{OK: true})
+}
+
+type verifyRequest struct {
+	Phone string `json:"phone"`
+	Code  string `json:"code"`
+}
+
+type verifyResponse struct {
+	OK bool `json:"ok"`
+}
+
+func (h *OTPHandler) Verify(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	var req verifyRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
+		return
+	}
+	defer r.Body.Close()
+
+	ctx := r.Context()
+	if err := h.src.Verify(ctx, req.Phone, req.Code); err != nil {
+		errCode := "INTERNAL_ERROR"
+		writeError(w, http.StatusInternalServerError, errCode, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, &verifyResponse{OK: true})
 }
