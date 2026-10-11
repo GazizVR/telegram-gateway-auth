@@ -19,8 +19,8 @@ func main() {
 	otpService := service.NewOTPService(*gateway)
 	otpHandler := handler.NewOTPHandler(otpService)
 	mux := http.NewServeMux()
-	mux.HandleFunc("/send-code", otpHandler.Send)
-	if err := http.ListenAndServe("0.0.0.0:7777", mux); err != nil {
+	mux.HandleFunc("POST /send-code", otpHandler.Send)
+	if err := http.ListenAndServe(config.HTTPAddr, mux); err != nil {
 		log.Fatalln(err)
 	}
 }
