@@ -14,6 +14,12 @@ type OTPHandler struct {
 	src OTPService
 }
 
+func NewOTPHandler(service OTPService) *OTPHandler {
+	return &OTPHandler{
+		src: service,
+	}
+}
+
 type sendRequest struct {
 	Phone string `json:"phone"`
 }

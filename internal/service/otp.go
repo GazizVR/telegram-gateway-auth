@@ -10,6 +10,12 @@ type OTPService struct {
 	cl telegramgateway.Client
 }
 
+func NewOTPService(client telegramgateway.Client) *OTPService {
+	return &OTPService{
+		cl: client,
+	}
+}
+
 const defaultCodeLength int = 6
 
 func (s *OTPService) Send(ctx context.Context, phone string) error {
