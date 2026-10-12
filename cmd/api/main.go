@@ -14,9 +14,9 @@ import (
 
 func main() {
 	config, err := config.Load()
-    if err != nil {
-        log.Fatalln(err)
-    }
+	if err != nil {
+		log.Fatalln(err)
+	}
 	gateway, err := telegramgateway.NewClient(config.Token)
 	if err != nil {
 		log.Fatalln(err)
@@ -29,7 +29,8 @@ func main() {
 	otpService := service.NewOTPService(gateway, otpStore)
 	otpHandler := handler.NewOTPHandler(otpService)
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /send-code", otpHandler.Send)
+	mux.HandleFunc("POST /v1/send-code", otpHandler.Send)
+	mux.HandleFunc("POST /v1/verify-code", otpHandler.Verify)
 	if err := http.ListenAndServe(config.HTTPAddr, mux); err != nil {
 		log.Fatalln(err)
 	}
