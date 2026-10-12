@@ -22,10 +22,8 @@ func main() {
 		log.Fatalln(err)
 	}
 	rdb := redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379",
-		Password: "",
-		DB:       0,
-		Protocol: 2,
+		Addr:     config.RedisAddr,
+		Password: config.RedisPassword,
 	})
 	otpStore := repository.NewOTPRedis(rdb)
 	otpService := service.NewOTPService(gateway, otpStore)
