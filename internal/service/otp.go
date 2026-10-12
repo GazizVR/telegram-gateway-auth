@@ -13,13 +13,32 @@ type OTPStore interface {
 	Delete(ctx context.Context, phone string) error
 }
 
+type client interface {
+    SendVerificationMessage(
+	    ctx context.Context,
+	    req telegramgateway.SendVerificationMessageRequest,
+    ) (*telegramgateway.RequestStatus, error)
+    CheckSendAbility(
+	    ctx context.Context,
+	    req telegramgateway.CheckSendAbilityRequest,
+    ) (*telegramgateway.RequestStatus, error)
+    CheckVerificationStatus(
+	    ctx context.Context,
+	    req telegramgateway.CheckVerificationStatusRequest,
+    ) (*telegramgateway.RequestStatus, error)
+    RevokeVerificationMessage(
+	    ctx context.Context,
+	    req telegramgateway.RevokeVerificationMessageRequest,
+    ) (bool, error)
+}
+
 type OTPService struct {
-	cl    telegramgateway.Client
+	cl    client
 	store OTPStore
 }
 
 func NewOTPService(
-	client telegramgateway.Client,
+	client client,
 	store OTPStore,
 ) *OTPService {
 	return &OTPService{

@@ -25,7 +25,7 @@ func main() {
 		Protocol: 2,
 	})
 	otpStore := repository.NewOTPRedis(rdb)
-	otpService := service.NewOTPService(*gateway, otpStore)
+	otpService := service.NewOTPService(gateway, otpStore)
 	otpHandler := handler.NewOTPHandler(otpService)
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /send-code", otpHandler.Send)
