@@ -13,7 +13,10 @@ import (
 )
 
 func main() {
-	config := config.Load()
+	config, err := config.Load()
+    if err != nil {
+        log.Fatalln(err)
+    }
 	gateway, err := telegramgateway.NewClient(config.Token)
 	if err != nil {
 		log.Fatalln(err)
