@@ -2,9 +2,11 @@ package service
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	telegramgateway "github.com/gazizvr/go-telegram-gateway"
+	"github.com/gazizvr/telegram-gateway-auth/internal/domain"
 )
 
 type OTPStore interface {
@@ -14,22 +16,22 @@ type OTPStore interface {
 }
 
 type client interface {
-    SendVerificationMessage(
-	    ctx context.Context,
-	    req telegramgateway.SendVerificationMessageRequest,
-    ) (*telegramgateway.RequestStatus, error)
-    CheckSendAbility(
-	    ctx context.Context,
-	    req telegramgateway.CheckSendAbilityRequest,
-    ) (*telegramgateway.RequestStatus, error)
-    CheckVerificationStatus(
-	    ctx context.Context,
-	    req telegramgateway.CheckVerificationStatusRequest,
-    ) (*telegramgateway.RequestStatus, error)
-    RevokeVerificationMessage(
-	    ctx context.Context,
-	    req telegramgateway.RevokeVerificationMessageRequest,
-    ) (bool, error)
+	SendVerificationMessage(
+		ctx context.Context,
+		req telegramgateway.SendVerificationMessageRequest,
+	) (*telegramgateway.RequestStatus, error)
+	CheckSendAbility(
+		ctx context.Context,
+		req telegramgateway.CheckSendAbilityRequest,
+	) (*telegramgateway.RequestStatus, error)
+	CheckVerificationStatus(
+		ctx context.Context,
+		req telegramgateway.CheckVerificationStatusRequest,
+	) (*telegramgateway.RequestStatus, error)
+	RevokeVerificationMessage(
+		ctx context.Context,
+		req telegramgateway.RevokeVerificationMessageRequest,
+	) (bool, error)
 }
 
 type OTPService struct {
@@ -58,7 +60,7 @@ func (s *OTPService) Send(ctx context.Context, phone string) error {
 		},
 	)
 	if err != nil {
-		return err
+		return mapGatewayError(err)
 	}
 	req := telegramgateway.SendVerificationMessageRequest{
 		PhoneNumber: resp.PhoneNumber,
@@ -66,7 +68,7 @@ func (s *OTPService) Send(ctx context.Context, phone string) error {
 		CodeLength:  defaultCodeLength,
 	}
 	if _, err := s.cl.SendVerificationMessage(ctx, req); err != nil {
-		return err
+		return mapGatewayError(err)
 	}
 	return s.store.Set(ctx, phone, req.RequestID, codeDefaultTTL)
 }
@@ -76,22 +78,67 @@ func (s *OTPService) Verify(ctx context.Context, phone, code string) error {
 	if err != nil {
 		return err
 	}
+	if reqId == nil || *reqId == "" {
+		return domain.ErrOTPNotFound
+	}
 	req := telegramgateway.CheckVerificationStatusRequest{
 		RequestID: *reqId,
 		Code:      code,
 	}
 	resp, err := s.cl.CheckVerificationStatus(ctx, req)
 	if err != nil {
-		return err
+		return mapGatewayError(err)
 	}
-	if resp.VerificationStatus.Status == telegramgateway.VerificationCodeValid {
-		s.store.Delete(ctx, phone)
-		s.cl.RevokeVerificationMessage(
+	if resp.VerificationStatus == nil {
+		return domain.ErrInvalidCode
+	}
+	switch resp.VerificationStatus.Status {
+	case telegramgateway.VerificationCodeValid:
+		_ = s.store.Delete(ctx, phone)
+		_, _ = s.cl.RevokeVerificationMessage(
 			ctx,
 			telegramgateway.RevokeVerificationMessageRequest{RequestID: *reqId},
 		)
-	} else {
-		return ErrCodeInvalid
+		return nil
+	case telegramgateway.VerificationCodeInvalid:
+		return domain.ErrInvalidCode
+	case telegramgateway.VerificationExpired:
+		return domain.ErrCodeExpired
+	case telegramgateway.VerificationMaxAttempts:
+		return domain.ErrMaxAttemptsExceeded
+	default:
+		return domain.ErrInvalidCode
 	}
-	return nil
+}
+
+func mapGatewayError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var floodErr *telegramgateway.FloodError
+	if errors.As(err, &floodErr) {
+		return &domain.FloodWaitError{WaitTime: floodErr.WaitTime}
+	}
+	switch {
+	case errors.Is(err, telegramgateway.ErrPhoneNumberInvalid),
+		errors.Is(err, telegramgateway.ErrPhoneNumberMismatch):
+		return domain.ErrInvalidPhoneNumber
+	case errors.Is(err, telegramgateway.ErrMessageAlreadySent):
+		return domain.ErrMessageAlreadySent
+	case errors.Is(err, telegramgateway.ErrCodeInvalid):
+		return domain.ErrInvalidCode
+	case errors.Is(err, telegramgateway.ErrCodeExpired):
+		return domain.ErrCodeExpired
+	case errors.Is(err, telegramgateway.ErrCodeMaxAttemptsExceeded):
+		return domain.ErrMaxAttemptsExceeded
+	case errors.Is(err, telegramgateway.ErrRequestIDInvalid),
+		errors.Is(err, telegramgateway.ErrRequestIDRequired):
+		return domain.ErrOTPNotFound
+	case errors.Is(err, telegramgateway.ErrBalanceNotEnough),
+		errors.Is(err, telegramgateway.ErrAccessTokenInvalid),
+		errors.Is(err, telegramgateway.ErrAccessTokenRequired):
+		return domain.ErrGatewayUnavailable
+	default:
+		return err
+	}
 }

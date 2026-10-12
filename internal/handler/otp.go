@@ -3,7 +3,11 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
+	"strconv"
+
+	"github.com/gazizvr/telegram-gateway-auth/internal/domain"
 )
 
 type OTPService interface {
@@ -35,14 +39,14 @@ func (h *OTPHandler) Send(
 ) {
 	var req sendRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
 		return
 	}
 	defer r.Body.Close()
 
 	ctx := r.Context()
 	if err := h.src.Send(ctx, req.Phone); err != nil {
-		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
+		h.handleError(w, err)
 		return
 	}
 
@@ -64,17 +68,48 @@ func (h *OTPHandler) Verify(
 ) {
 	var req verifyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
 		return
 	}
 	defer r.Body.Close()
 
 	ctx := r.Context()
 	if err := h.src.Verify(ctx, req.Phone, req.Code); err != nil {
-		errCode := "INTERNAL_ERROR"
-		writeError(w, http.StatusInternalServerError, errCode, err.Error())
+		h.handleError(w, err)
 		return
 	}
 
 	writeJSON(w, http.StatusOK, &verifyResponse{OK: true})
+}
+
+func (h *OTPHandler) handleError(w http.ResponseWriter, err error) {
+	var floodErr *domain.FloodWaitError
+	if errors.As(err, &floodErr) {
+		if floodErr.WaitTime > 0 {
+			w.Header().Set("Retry-After", strconv.Itoa(int(floodErr.WaitTime.Seconds())))
+		}
+		writeError(w, http.StatusTooManyRequests, "TOO_MANY_REQUESTS", floodErr.Error())
+		return
+	}
+
+	switch {
+	case errors.Is(err, domain.ErrInvalidPhoneNumber):
+		writeError(w, http.StatusBadRequest, "INVALID_PHONE_NUMBER", err.Error())
+	case errors.Is(err, domain.ErrInvalidCode):
+		writeError(w, http.StatusBadRequest, "INVALID_CODE", err.Error())
+	case errors.Is(err, domain.ErrCodeExpired):
+		writeError(w, http.StatusBadRequest, "CODE_EXPIRED", err.Error())
+	case errors.Is(err, domain.ErrMaxAttemptsExceeded):
+		writeError(w, http.StatusTooManyRequests, "MAX_ATTEMPTS_EXCEEDED", err.Error())
+	case errors.Is(err, domain.ErrTooManyRequests):
+		writeError(w, http.StatusTooManyRequests, "TOO_MANY_REQUESTS", err.Error())
+	case errors.Is(err, domain.ErrMessageAlreadySent):
+		writeError(w, http.StatusConflict, "MESSAGE_ALREADY_SENT", err.Error())
+	case errors.Is(err, domain.ErrOTPNotFound):
+		writeError(w, http.StatusNotFound, "OTP_NOT_FOUND", err.Error())
+	case errors.Is(err, domain.ErrGatewayUnavailable):
+		writeError(w, http.StatusBadGateway, "GATEWAY_UNAVAILABLE", "telegram gateway service unavailable")
+	default:
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
+	}
 }

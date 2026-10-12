@@ -2,8 +2,10 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"time"
 
+	"github.com/gazizvr/telegram-gateway-auth/internal/domain"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -20,6 +22,9 @@ func NewOTPRedis(rdb *redis.Client) *OTPRedis {
 func (r *OTPRedis) Get(ctx context.Context, phone string) (*string, error) {
 	val, err := r.rdb.Get(ctx, phone).Result()
 	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return nil, domain.ErrOTPNotFound
+		}
 		return nil, err
 	}
 	return &val, nil
