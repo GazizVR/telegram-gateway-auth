@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
+	"math/big"
 	"time"
 
 	"github.com/gazizvr/telegram-gateway-auth/internal/domain"
@@ -34,15 +36,23 @@ func NewOTPService(
 	}
 }
 
-func (s *OTPService) generateCode() (*string, error) {
-	code := ""
+func generateOTP(length int) (*string, error) {
+	limit := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(length)), nil)
+	num, err := rand.Int(rand.Reader, limit)
+	if err != nil {
+		return nil, fmt.Errorf("generate otp: %w", err)
+	}
+	code := fmt.Sprintf("%0*d", length, num.Int64())
 	return &code, nil
 }
 
-const defaultTTL = 150 * time.Second
+const (
+	defaultTTL           = 150 * time.Second
+	defaultOTPLength int = 6
+)
 
 func (s *OTPService) Send(ctx context.Context, phone string) error {
-	code, err := s.generateCode()
+	code, err := generateOTP(defaultOTPLength)
 	if err != nil {
 		return err
 	}
