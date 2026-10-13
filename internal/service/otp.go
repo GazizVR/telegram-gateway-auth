@@ -9,8 +9,8 @@ import (
 )
 
 type OTPStore interface {
-	Get(ctx context.Context, phone string) (*string, error)
-	Set(ctx context.Context, phone, reqID string, expAt time.Duration) error
+	Get(ctx context.Context, phone string) (*domain.Challenge, error)
+	Set(ctx context.Context, phone string, challenge domain.Challenge, ttl time.Duration) error
 	Delete(ctx context.Context, phone string) error
 }
 
@@ -34,15 +34,23 @@ func NewOTPService(
 	}
 }
 
+func (s *OTPService) generateCode() (*string, error) {
+	code := ""
+	return &code, nil
+}
+
 const defaultTTL = 150 * time.Second
 
 func (s *OTPService) Send(ctx context.Context, phone string) error {
-	code := ""
-	challenge, err := s.provider.Send(ctx, phone, code, int(defaultTTL))
+	code, err := s.generateCode()
 	if err != nil {
 		return err
 	}
-	return s.store.Set(ctx, phone, string(*challenge), defaultTTL)
+	challenge, err := s.provider.Send(ctx, phone, *code, int(defaultTTL))
+	if err != nil {
+		return err
+	}
+	return s.store.Set(ctx, phone, *challenge, defaultTTL)
 }
 
 func (s *OTPService) Verify(ctx context.Context, phone, code string) error {
@@ -53,7 +61,7 @@ func (s *OTPService) Verify(ctx context.Context, phone, code string) error {
 	if reqId == nil || *reqId == "" {
 		return domain.ErrOTPNotFound
 	}
-	if err := s.provider.Verify(ctx, domain.Challenge(*reqId), code); err != nil {
+	if err := s.provider.Verify(ctx, *reqId, code); err != nil {
 		return err
 	}
 	if err := s.store.Delete(ctx, phone); err != nil {

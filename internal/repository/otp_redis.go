@@ -19,7 +19,7 @@ func NewOTPRedis(rdb *redis.Client) *OTPRedis {
 	}
 }
 
-func (r *OTPRedis) Get(ctx context.Context, phone string) (*string, error) {
+func (r *OTPRedis) Get(ctx context.Context, phone string) (*domain.Challenge, error) {
 	val, err := r.rdb.Get(ctx, phone).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
@@ -27,15 +27,17 @@ func (r *OTPRedis) Get(ctx context.Context, phone string) (*string, error) {
 		}
 		return nil, err
 	}
-	return &val, nil
+	challenge := domain.Challenge(val)
+	return &challenge, nil
 }
 
 func (r *OTPRedis) Set(
 	ctx context.Context,
-	phone, reqID string,
+	phone string,
+	challenge domain.Challenge,
 	expAt time.Duration,
 ) error {
-	return r.rdb.Set(ctx, phone, reqID, expAt).Err()
+	return r.rdb.Set(ctx, phone, string(challenge), expAt).Err()
 }
 
 func (r *OTPRedis) Delete(ctx context.Context, phone string) error {
