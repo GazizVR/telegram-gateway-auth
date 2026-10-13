@@ -75,7 +75,7 @@ func (s *OTPService) Verify(ctx context.Context, phone, code string) error {
 		return err
 	}
 	if err := s.store.Delete(ctx, phone); err != nil {
-		return fmt.Errorf("delete challenge failed: %w", err)
+		return err
 	}
 	return nil
 }

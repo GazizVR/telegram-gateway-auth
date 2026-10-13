@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/gazizvr/telegram-gateway-auth/internal/domain"
@@ -25,7 +26,7 @@ func (r *OTPRedis) Get(ctx context.Context, phone string) (*domain.Challenge, er
 		if errors.Is(err, redis.Nil) {
 			return nil, domain.ErrOTPNotFound
 		}
-		return nil, err
+		return nil, fmt.Errorf("get challenge failed: %w", err)
 	}
 	challenge := domain.Challenge(val)
 	return &challenge, nil
@@ -37,9 +38,15 @@ func (r *OTPRedis) Set(
 	challenge domain.Challenge,
 	expAt time.Duration,
 ) error {
-	return r.rdb.Set(ctx, phone, string(challenge), expAt).Err()
+	if err := r.rdb.Set(ctx, phone, string(challenge), expAt).Err(); err != nil {
+		return fmt.Errorf("set challenge failed: %w", err)
+	}
+	return nil
 }
 
 func (r *OTPRedis) Delete(ctx context.Context, phone string) error {
-	return r.rdb.Del(ctx, phone).Err()
+	if err := r.rdb.Del(ctx, phone).Err(); err != nil {
+		return fmt.Errorf("delete challenge failed: %w", err)
+	}
+	return nil
 }
