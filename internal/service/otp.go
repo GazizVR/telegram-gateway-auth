@@ -15,7 +15,7 @@ type OTPStore interface {
 }
 
 type OTPProvider interface {
-	Send(ctx context.Context, phone, code string, ttl int) (*domain.Challenge, error)
+	Send(ctx context.Context, phone, code string, ttl time.Duration) (*domain.Challenge, error)
 	Verify(ctx context.Context, challenge domain.Challenge, code string) error
 }
 
@@ -46,7 +46,7 @@ func (s *OTPService) Send(ctx context.Context, phone string) error {
 	if err != nil {
 		return err
 	}
-	challenge, err := s.provider.Send(ctx, phone, *code, int(defaultTTL))
+	challenge, err := s.provider.Send(ctx, phone, *code, defaultTTL)
 	if err != nil {
 		return err
 	}

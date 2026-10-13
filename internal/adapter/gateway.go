@@ -2,6 +2,7 @@ package adapter
 
 import (
 	"context"
+	"time"
 
 	telegramgateway "github.com/gazizvr/go-telegram-gateway"
 	"github.com/gazizvr/telegram-gateway-auth/internal/domain"
@@ -21,7 +22,7 @@ func (c *TelegramGateway) Send(
 	ctx context.Context,
 	phone string,
 	code string,
-	ttl int,
+	ttl time.Duration,
 ) (*domain.Challenge, error) {
 	resp, err := c.client.CheckSendAbility(
 		ctx,
@@ -32,11 +33,12 @@ func (c *TelegramGateway) Send(
 	if err != nil {
 		return nil, mapGatewayError(err)
 	}
+	ttlSec := int(ttl.Seconds())
 	req := telegramgateway.SendVerificationMessageRequest{
 		PhoneNumber: resp.PhoneNumber,
 		RequestID:   resp.RequestID,
 		Code:        code,
-		TTL:         ttl,
+		TTL:         ttlSec,
 	}
 	if _, err := c.client.SendVerificationMessage(ctx, req); err != nil {
 		return nil, mapGatewayError(err)
