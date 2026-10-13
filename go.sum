@@ -4,6 +4,8 @@ github.com/gazizvr/go-telegram-gateway v0.0.0-20261010131126-8b89e4379a77 h1:GNm
 github.com/gazizvr/go-telegram-gateway v0.0.0-20261010131126-8b89e4379a77/go.mod h1:9yHS2Bo3PeBW4iM/g5kqeqtFqIlph96OmHOxj4tpnc0=
 github.com/gazizvr/go-telegram-gateway v0.0.0-20261012124931-264fe5efef18 h1:arzH/lyLbmbs5db7gCxdtfdFBsBQ/PXPTRvMTtPuX0w=
 github.com/gazizvr/go-telegram-gateway v0.0.0-20261012124931-264fe5efef18/go.mod h1:9yHS2Bo3PeBW4iM/g5kqeqtFqIlph96OmHOxj4tpnc0=
+github.com/gazizvr/go-telegram-gateway v0.0.0-20261012143906-13b07bf01d46 h1:TS/hSMRcdNtAyUd3jOuQaCXwp0AVdzYhrk+q6VLdp1M=
+github.com/gazizvr/go-telegram-gateway v0.0.0-20261012143906-13b07bf01d46/go.mod h1:9yHS2Bo3PeBW4iM/g5kqeqtFqIlph96OmHOxj4tpnc0=
 github.com/redis/go-redis/v9 v9.23.0 h1:/TTVdJa8BRNsybwwGGnmiYktHNlUXtbOQxlWpHBPL3s=
 github.com/redis/go-redis/v9 v9.23.0/go.mod h1:EWP2UUk+XDaI1s5nQB5mablZN6vccXlmBQTyfnF87D0=
 go.uber.org/atomic v1.12.0 h1:BvcXdFKuviU4fTL/f+SxdQ5qJX/Jix8pAkgdUcb3XOE=

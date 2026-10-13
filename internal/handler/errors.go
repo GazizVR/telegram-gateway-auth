@@ -33,6 +33,8 @@ func handleError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusConflict, "MESSAGE_ALREADY_SENT", err.Error())
 	case errors.Is(err, domain.ErrOTPNotFound):
 		writeError(w, http.StatusNotFound, "OTP_NOT_FOUND", err.Error())
+    case errors.Is(err, domain.ErrPhoneNotReachable):
+        writeError(w, http.StatusUnprocessableEntity, "PHONE_NOT_REACHABLE",err.Error())
 	case errors.Is(err, domain.ErrGatewayUnavailable):
 		writeError(w, http.StatusBadGateway, "GATEWAY_UNAVAILABLE", "telegram gateway service unavailable")
 	default:
