@@ -1,0 +1,41 @@
+package handler
+
+import (
+    "errors"
+    "net/http"
+    "strconv"
+
+	"github.com/gazizvr/telegram-gateway-auth/internal/domain"
+)
+
+func handleError(w http.ResponseWriter, err error) {
+	var floodErr *domain.FloodWaitError
+	if errors.As(err, &floodErr) {
+		if floodErr.WaitTime > 0 {
+			w.Header().Set("Retry-After", strconv.Itoa(int(floodErr.WaitTime.Seconds())))
+		}
+		writeError(w, http.StatusTooManyRequests, "TOO_MANY_REQUESTS", floodErr.Error())
+		return
+	}
+
+	switch {
+	case errors.Is(err, domain.ErrInvalidPhoneNumber):
+		writeError(w, http.StatusBadRequest, "INVALID_PHONE_NUMBER", err.Error())
+	case errors.Is(err, domain.ErrInvalidCode):
+		writeError(w, http.StatusBadRequest, "INVALID_CODE", err.Error())
+	case errors.Is(err, domain.ErrCodeExpired):
+		writeError(w, http.StatusBadRequest, "CODE_EXPIRED", err.Error())
+	case errors.Is(err, domain.ErrMaxAttemptsExceeded):
+		writeError(w, http.StatusTooManyRequests, "MAX_ATTEMPTS_EXCEEDED", err.Error())
+	case errors.Is(err, domain.ErrTooManyRequests):
+		writeError(w, http.StatusTooManyRequests, "TOO_MANY_REQUESTS", err.Error())
+	case errors.Is(err, domain.ErrMessageAlreadySent):
+		writeError(w, http.StatusConflict, "MESSAGE_ALREADY_SENT", err.Error())
+	case errors.Is(err, domain.ErrOTPNotFound):
+		writeError(w, http.StatusNotFound, "OTP_NOT_FOUND", err.Error())
+	case errors.Is(err, domain.ErrGatewayUnavailable):
+		writeError(w, http.StatusBadGateway, "GATEWAY_UNAVAILABLE", "telegram gateway service unavailable")
+	default:
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
+	}
+}
