@@ -8,7 +8,7 @@ import (
 	"github.com/gazizvr/telegram-gateway-auth/internal/adapter"
 	"github.com/gazizvr/telegram-gateway-auth/internal/config"
 	"github.com/gazizvr/telegram-gateway-auth/internal/handler"
-	"github.com/gazizvr/telegram-gateway-auth/internal/repository"
+	redis_otp "github.com/gazizvr/telegram-gateway-auth/internal/repository/redis/otp"
 	"github.com/gazizvr/telegram-gateway-auth/internal/service"
 	"github.com/redis/go-redis/v9"
 )
@@ -27,7 +27,7 @@ func main() {
 		Addr:     config.RedisAddr,
 		Password: config.RedisPassword,
 	})
-	otpStore := repository.NewOTPRedis(rdb)
+	otpStore := redis_otp.NewOTPRedis(rdb)
 	otpService := service.NewOTPService(otpProvider, otpStore)
 	otpHandler := handler.NewOTPHandler(otpService)
 	mux := http.NewServeMux()

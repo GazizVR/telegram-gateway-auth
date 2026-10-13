@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"log/slog"
 	"math/big"
 	"time"
 
@@ -11,14 +12,14 @@ import (
 )
 
 type OTPStore interface {
-	Get(ctx context.Context, phone string) (*domain.Challenge, error)
-	Set(ctx context.Context, phone string, challenge domain.Challenge, ttl time.Duration) error
+	Get(ctx context.Context, phone string) (*domain.Verification, error)
+	Set(ctx context.Context, phone string, verification domain.Verification, ttl time.Duration) error
 	Delete(ctx context.Context, phone string) error
 }
 
 type OTPProvider interface {
-	Send(ctx context.Context, phone, code string, ttl time.Duration) (*domain.Challenge, error)
-	Verify(ctx context.Context, challenge domain.Challenge, code string) error
+	Send(ctx context.Context, phone, code string, ttl time.Duration) (*domain.VerificationID, error)
+	Verify(ctx context.Context, id domain.VerificationID, code string) error
 }
 
 type OTPService struct {
@@ -42,8 +43,8 @@ func generateOTP(length int) (*string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("generate otp: %w", err)
 	}
-	code := fmt.Sprintf("%0*d", length, num.Int64())
-	return &code, nil
+	otp := fmt.Sprintf("%0*d", length, num.Int64())
+	return &otp, nil
 }
 
 const (
@@ -52,29 +53,35 @@ const (
 )
 
 func (s *OTPService) Send(ctx context.Context, phone string) error {
-	code, err := generateOTP(defaultOTPLength)
+	otp, err := generateOTP(defaultOTPLength)
 	if err != nil {
 		return err
 	}
-	challenge, err := s.provider.Send(ctx, phone, *code, defaultTTL)
+	verificationID, err := s.provider.Send(ctx, phone, *otp, defaultTTL)
 	if err != nil {
 		return err
 	}
-	return s.store.Set(ctx, phone, *challenge, defaultTTL)
+	verification := domain.Verification{
+		ID:  verificationID,
+		OTP: *otp,
+	}
+	return s.store.Set(ctx, phone, verification, defaultTTL)
 }
 
 func (s *OTPService) Verify(ctx context.Context, phone, code string) error {
-	reqId, err := s.store.Get(ctx, phone)
+	verification, err := s.store.Get(ctx, phone)
 	if err != nil {
 		return err
 	}
-	if reqId == nil || *reqId == "" {
+	if verification == nil {
 		return domain.ErrOTPNotFound
 	}
-	if err := s.provider.Verify(ctx, *reqId, code); err != nil {
+	if err := s.provider.Verify(ctx, *verification.ID, code); err != nil {
+		slog.ErrorContext(ctx, err.Error())
 		return err
 	}
 	if err := s.store.Delete(ctx, phone); err != nil {
+		slog.ErrorContext(ctx, err.Error())
 		return err
 	}
 	return nil

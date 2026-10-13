@@ -23,7 +23,7 @@ func (c *TelegramGateway) Send(
 	phone string,
 	code string,
 	ttl time.Duration,
-) (*domain.Challenge, error) {
+) (*domain.VerificationID, error) {
 	resp, err := c.client.CheckSendAbility(
 		ctx,
 		telegramgateway.CheckSendAbilityRequest{
@@ -43,13 +43,13 @@ func (c *TelegramGateway) Send(
 	if _, err := c.client.SendVerificationMessage(ctx, req); err != nil {
 		return nil, mapGatewayError(err)
 	}
-	challenge := domain.Challenge(resp.RequestID)
+	challenge := domain.VerificationID(resp.RequestID)
 	return &challenge, nil
 }
 
 func (c *TelegramGateway) Verify(
 	ctx context.Context,
-	challenge domain.Challenge,
+	challenge domain.VerificationID,
 	code string,
 ) error {
 	req := telegramgateway.CheckVerificationStatusRequest{
