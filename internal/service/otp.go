@@ -13,6 +13,7 @@ import (
 
 type OTPStore interface {
 	Get(ctx context.Context, phone string) (*domain.Verification, error)
+	Exists(ctx context.Context, phone string) (bool, error)
 	Set(ctx context.Context, phone string, verification domain.Verification, ttl time.Duration) error
 	Delete(ctx context.Context, phone string) error
 }
@@ -53,6 +54,13 @@ const (
 )
 
 func (s *OTPService) Send(ctx context.Context, phone string) error {
+	exists, err := s.store.Exists(ctx, phone)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return domain.ErrMessageAlreadySent
+	}
 	otp, err := generateOTP(defaultOTPLength)
 	if err != nil {
 		return err

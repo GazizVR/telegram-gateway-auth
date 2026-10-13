@@ -20,13 +20,13 @@ func NewStore(rdb *redis.Client) *Store {
 	}
 }
 
-func otpKey(phone string) string {
+func key(phone string) string {
 	return fmt.Sprintf("otp:%s", phone)
 }
 
 func (s *Store) Get(ctx context.Context, phone string) (*domain.Verification, error) {
 	var verificationDTO verificationRedisDTO
-	if err := s.rdb.HGetAll(ctx, otpKey(phone)).Scan(&verificationDTO); err != nil {
+	if err := s.rdb.HGetAll(ctx, key(phone)).Scan(&verificationDTO); err != nil {
 		if errors.Is(err, redis.Nil) {
 			return nil, domain.ErrOTPNotFound
 		}
@@ -34,6 +34,14 @@ func (s *Store) Get(ctx context.Context, phone string) (*domain.Verification, er
 	}
 	verification := verificationDTO.toDomain()
 	return &verification, nil
+}
+
+func (s *Store) Exists(ctx context.Context, phone string) (bool, error) {
+	count, err := s.rdb.Exists(ctx, key(phone)).Result()
+	if err != nil {
+		return false, fmt.Errorf("check exists: %w", err)
+	}
+	return count > 0, nil
 }
 
 func (s *Store) Set(
@@ -44,8 +52,8 @@ func (s *Store) Set(
 ) error {
 	verificationDTO := toRedisDTO(verification)
 	_, err := s.rdb.TxPipelined(ctx, func(p redis.Pipeliner) error {
-		p.HSet(ctx, otpKey(phone), verificationDTO)
-		p.Expire(ctx, otpKey(phone), ttl)
+		p.HSet(ctx, key(phone), verificationDTO)
+		p.Expire(ctx, key(phone), ttl)
 		return nil
 	})
 	if err != nil {
@@ -55,7 +63,7 @@ func (s *Store) Set(
 }
 
 func (s *Store) Delete(ctx context.Context, phone string) error {
-	if err := s.rdb.Del(ctx, otpKey(phone)).Err(); err != nil {
+	if err := s.rdb.Del(ctx, key(phone)).Err(); err != nil {
 		return fmt.Errorf("delete verification: %w", err)
 	}
 	return nil
