@@ -9,18 +9,26 @@ type verificationRedisDTO struct {
 }
 
 func (v verificationRedisDTO) toDomain() domain.Verification {
-	id := domain.VerificationID(*v.ID)
+	var id *domain.VerificationID
+	if v.ID != nil {
+		rawId := domain.VerificationID(*v.ID)
+		id = &rawId
+	}
 	return domain.Verification{
-		ID:       &id,
+		ID:       id,
 		OTP:      v.OTP,
 		Attempts: v.Attempts,
 	}
 }
 
 func toRedisDTO(v domain.Verification) verificationRedisDTO {
-	id := string(*v.ID)
+	var id *string
+	if v.ID != nil {
+		rawId := string(*v.ID)
+		id = &rawId
+	}
 	return verificationRedisDTO{
-		ID:       &id,
+		ID:       id,
 		OTP:      v.OTP,
 		Attempts: v.Attempts,
 	}

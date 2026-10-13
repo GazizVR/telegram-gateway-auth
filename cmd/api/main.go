@@ -27,7 +27,7 @@ func main() {
 		Addr:     config.RedisAddr,
 		Password: config.RedisPassword,
 	})
-	otpStore := redis_otp.NewOTPRedis(rdb)
+	otpStore := redis_otp.NewStore(rdb)
 	otpService := service.NewOTPService(otpProvider, otpStore)
 	otpHandler := handler.NewOTPHandler(otpService)
 	mux := http.NewServeMux()

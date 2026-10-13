@@ -73,7 +73,7 @@ func (s *OTPService) Verify(ctx context.Context, phone, code string) error {
 	if err != nil {
 		return err
 	}
-	if verification == nil {
+	if verification == nil || verification.ID == nil {
 		return domain.ErrOTPNotFound
 	}
 	if err := s.provider.Verify(ctx, *verification.ID, code); err != nil {
