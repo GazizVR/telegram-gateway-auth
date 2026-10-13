@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	telegramgateway "github.com/gazizvr/go-telegram-gateway"
+	"github.com/gazizvr/telegram-gateway-auth/internal/adapter"
 	"github.com/gazizvr/telegram-gateway-auth/internal/config"
 	"github.com/gazizvr/telegram-gateway-auth/internal/handler"
 	"github.com/gazizvr/telegram-gateway-auth/internal/repository"
@@ -21,12 +22,13 @@ func main() {
 	if err != nil {
 		log.Fatalln(err)
 	}
+	otpProvider := adapter.NewTelegramGateway(gateway)
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     config.RedisAddr,
 		Password: config.RedisPassword,
 	})
 	otpStore := repository.NewOTPRedis(rdb)
-	otpService := service.NewOTPService(gateway, otpStore)
+	otpService := service.NewOTPService(otpProvider, otpStore)
 	otpHandler := handler.NewOTPHandler(otpService)
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/send-code", otpHandler.Send)

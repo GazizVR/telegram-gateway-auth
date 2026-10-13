@@ -2,9 +2,9 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"time"
 
-	telegramgateway "github.com/gazizvr/go-telegram-gateway"
 	"github.com/gazizvr/telegram-gateway-auth/internal/domain"
 )
 
@@ -14,62 +14,35 @@ type OTPStore interface {
 	Delete(ctx context.Context, phone string) error
 }
 
-type client interface {
-	SendVerificationMessage(
-		ctx context.Context,
-		req telegramgateway.SendVerificationMessageRequest,
-	) (*telegramgateway.RequestStatus, error)
-	CheckSendAbility(
-		ctx context.Context,
-		req telegramgateway.CheckSendAbilityRequest,
-	) (*telegramgateway.RequestStatus, error)
-	CheckVerificationStatus(
-		ctx context.Context,
-		req telegramgateway.CheckVerificationStatusRequest,
-	) (*telegramgateway.RequestStatus, error)
-	RevokeVerificationMessage(
-		ctx context.Context,
-		req telegramgateway.RevokeVerificationMessageRequest,
-	) (bool, error)
+type OTPProvider interface {
+	Send(ctx context.Context, phone, code string, ttl int) (*domain.Challenge, error)
+	Verify(ctx context.Context, challenge domain.Challenge, code string) error
 }
 
 type OTPService struct {
-	cl    client
-	store OTPStore
+	provider OTPProvider
+	store    OTPStore
 }
 
 func NewOTPService(
-	client client,
+	provider OTPProvider,
 	store OTPStore,
 ) *OTPService {
 	return &OTPService{
-		cl:    client,
-		store: store,
+		provider: provider,
+		store:    store,
 	}
 }
 
-const defaultCodeLength int = 6
-const codeDefaultTTL = 150 * time.Second
+const defaultTTL = 150 * time.Second
 
 func (s *OTPService) Send(ctx context.Context, phone string) error {
-	resp, err := s.cl.CheckSendAbility(
-		ctx,
-		telegramgateway.CheckSendAbilityRequest{
-			PhoneNumber: phone,
-		},
-	)
+	code := ""
+	challenge, err := s.provider.Send(ctx, phone, code, int(defaultTTL))
 	if err != nil {
-		return mapGatewayError(err)
+		return err
 	}
-	req := telegramgateway.SendVerificationMessageRequest{
-		PhoneNumber: resp.PhoneNumber,
-		RequestID:   resp.RequestID,
-		CodeLength:  defaultCodeLength,
-	}
-	if _, err := s.cl.SendVerificationMessage(ctx, req); err != nil {
-		return mapGatewayError(err)
-	}
-	return s.store.Set(ctx, phone, req.RequestID, codeDefaultTTL)
+	return s.store.Set(ctx, phone, string(*challenge), defaultTTL)
 }
 
 func (s *OTPService) Verify(ctx context.Context, phone, code string) error {
@@ -80,32 +53,11 @@ func (s *OTPService) Verify(ctx context.Context, phone, code string) error {
 	if reqId == nil || *reqId == "" {
 		return domain.ErrOTPNotFound
 	}
-	req := telegramgateway.CheckVerificationStatusRequest{
-		RequestID: *reqId,
-		Code:      code,
+	if err := s.provider.Verify(ctx, domain.Challenge(*reqId), code); err != nil {
+		return err
 	}
-	resp, err := s.cl.CheckVerificationStatus(ctx, req)
-	if err != nil {
-		return mapGatewayError(err)
+	if err := s.store.Delete(ctx, phone); err != nil {
+		return fmt.Errorf("delete challenge failed: %w", err)
 	}
-	if resp.VerificationStatus == nil {
-		return domain.ErrInvalidCode
-	}
-	switch resp.VerificationStatus.Status {
-	case telegramgateway.VerificationCodeValid:
-		_ = s.store.Delete(ctx, phone)
-		_, _ = s.cl.RevokeVerificationMessage(
-			ctx,
-			telegramgateway.RevokeVerificationMessageRequest{RequestID: *reqId},
-		)
-		return nil
-	case telegramgateway.VerificationCodeInvalid:
-		return domain.ErrInvalidCode
-	case telegramgateway.VerificationExpired:
-		return domain.ErrCodeExpired
-	case telegramgateway.VerificationMaxAttempts:
-		return domain.ErrMaxAttemptsExceeded
-	default:
-		return domain.ErrInvalidCode
-	}
+	return nil
 }

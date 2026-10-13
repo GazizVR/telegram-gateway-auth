@@ -1,4 +1,4 @@
-package service
+package adapter
 
 import (
 	"errors"
@@ -30,9 +30,9 @@ func mapGatewayError(err error) error {
 	case errors.Is(err, telegramgateway.ErrRequestIDInvalid),
 		errors.Is(err, telegramgateway.ErrRequestIDRequired):
 		return domain.ErrOTPNotFound
-    case errors.Is(err, telegramgateway.ErrPhoneNumberNotFound),
-         errors.Is(err, telegramgateway.ErrPhoneNumberNotAvailable):
-         return domain.ErrPhoneNotReachable
+	case errors.Is(err, telegramgateway.ErrPhoneNumberNotFound),
+		errors.Is(err, telegramgateway.ErrPhoneNumberNotAvailable):
+		return domain.ErrPhoneNotReachable
 	case errors.Is(err, telegramgateway.ErrBalanceNotEnough),
 		errors.Is(err, telegramgateway.ErrAccessTokenInvalid),
 		errors.Is(err, telegramgateway.ErrAccessTokenRequired):
