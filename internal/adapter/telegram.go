@@ -7,17 +7,17 @@ import (
 	telegramgateway "github.com/gazizvr/go-telegram-gateway"
 )
 
-type TelegramGateway struct {
+type TelegramSender struct {
 	client *telegramgateway.Client
 }
 
-func NewTelegramGateway(client *telegramgateway.Client) *TelegramGateway {
-	return &TelegramGateway{
+func NewTelegramSender(client *telegramgateway.Client) *TelegramSender {
+	return &TelegramSender{
 		client: client,
 	}
 }
 
-func (c *TelegramGateway) Send(
+func (c *TelegramSender) Send(
 	ctx context.Context,
 	phone string,
 	code string,
@@ -30,7 +30,7 @@ func (c *TelegramGateway) Send(
 		},
 	)
 	if err != nil {
-		return mapGatewayError(err)
+		return mapTelegramError(err)
 	}
 	ttlSec := int(ttl.Seconds())
 	req := telegramgateway.SendVerificationMessageRequest{
@@ -40,7 +40,7 @@ func (c *TelegramGateway) Send(
 		TTL:         ttlSec,
 	}
 	if _, err := c.client.SendVerificationMessage(ctx, req); err != nil {
-		return mapGatewayError(err)
+		return mapTelegramError(err)
 	}
 	return nil
 }

@@ -14,7 +14,7 @@ var (
 	ErrMaxAttemptsExceeded = errors.New("maximum verification attempts exceeded")
 	ErrMessageAlreadySent  = errors.New("verification message already sent")
 	ErrTooManyRequests     = errors.New("too many requests")
-	ErrGatewayUnavailable  = errors.New("telegram gateway service unavailable")
+	ErrSenderUnavailable   = errors.New("sender service unavailable")
 	ErrPhoneNotReachable   = errors.New("phone number not reachable")
 )
 

@@ -7,7 +7,7 @@ import (
 	"github.com/gazizvr/telegram-gateway-auth/internal/domain"
 )
 
-func mapGatewayError(err error) error {
+func mapTelegramError(err error) error {
 	if err == nil {
 		return nil
 	}
@@ -36,7 +36,7 @@ func mapGatewayError(err error) error {
 	case errors.Is(err, telegramgateway.ErrBalanceNotEnough),
 		errors.Is(err, telegramgateway.ErrAccessTokenInvalid),
 		errors.Is(err, telegramgateway.ErrAccessTokenRequired):
-		return domain.ErrGatewayUnavailable
+		return domain.ErrSenderUnavailable
 	default:
 		return err
 	}

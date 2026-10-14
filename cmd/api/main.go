@@ -22,13 +22,14 @@ func main() {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	otpProvider := adapter.NewTelegramGateway(gateway)
+	telegramSender := adapter.NewTelegramSender(gateway)
+	smsSender := adapter.NewSMSSender()
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     config.RedisAddr,
 		Password: config.RedisPassword,
 	})
 	otpStore := redis_otp.NewStore(rdb)
-	otpService := service.NewOTPService(otpProvider, otpStore)
+	otpService := service.NewOTPService(telegramSender, smsSender, otpStore)
 	otpHandler := handler.NewOTPHandler(otpService)
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/send-code", otpHandler.Send)

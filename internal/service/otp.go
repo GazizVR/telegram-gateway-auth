@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"math/big"
 	"time"
@@ -14,25 +15,28 @@ type OTPStore interface {
 	Get(ctx context.Context, phone string) (*domain.Verification, error)
 	Exists(ctx context.Context, phone string) (bool, error)
 	Set(ctx context.Context, phone string, verification domain.Verification, ttl time.Duration) error
-    IncrAttempts(ctx context.Context, phone string) (int,error)
+	IncrAttempts(ctx context.Context, phone string) (int, error)
 	Delete(ctx context.Context, phone string) error
 }
 
-type OTPProvider interface {
+type OTPSender interface {
 	Send(ctx context.Context, phone, code string, ttl time.Duration) error
 }
 
 type OTPService struct {
-	provider OTPProvider
+	sender   OTPSender
+	fallback OTPSender
 	store    OTPStore
 }
 
 func NewOTPService(
-	provider OTPProvider,
+	sender OTPSender,
+	fallback OTPSender,
 	store OTPStore,
 ) *OTPService {
 	return &OTPService{
-		provider: provider,
+		sender:   sender,
+		fallback: fallback,
 		store:    store,
 	}
 }
@@ -64,8 +68,15 @@ func (s *OTPService) Send(ctx context.Context, phone string) error {
 	if err != nil {
 		return err
 	}
-	if err := s.provider.Send(ctx, phone, *otp, defaultTTL); err != nil {
-		return err
+	if err := s.sender.Send(ctx, phone, *otp, defaultTTL); err != nil {
+		if errors.Is(err, domain.ErrPhoneNotReachable) ||
+			errors.Is(err, domain.ErrSenderUnavailable) {
+			if err := s.fallback.Send(ctx, phone, *otp, defaultTTL); err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
 	}
 	verification := domain.Verification{OTP: *otp}
 	return s.store.Set(ctx, phone, verification, defaultTTL)
@@ -81,18 +92,18 @@ func (s *OTPService) Verify(ctx context.Context, phone, code string) error {
 	if verification == nil {
 		return domain.ErrOTPNotFound
 	}
-    if verification.Attempts >= maxAttempts {
-        return domain.ErrMaxAttemptsExceeded
-    }
-    attempts, err := s.store.IncrAttempts(ctx,phone)
-    if err != nil {
-        return err
-    }
-    if attempts > maxAttempts {
-        return domain.ErrMaxAttemptsExceeded
-    }
-    if verification.OTP != code {
-        return domain.ErrInvalidCode
-    }
+	if verification.Attempts >= maxAttempts {
+		return domain.ErrMaxAttemptsExceeded
+	}
+	attempts, err := s.store.IncrAttempts(ctx, phone)
+	if err != nil {
+		return err
+	}
+	if attempts > maxAttempts {
+		return domain.ErrMaxAttemptsExceeded
+	}
+	if verification.OTP != code {
+		return domain.ErrInvalidCode
+	}
 	return s.store.Delete(ctx, phone)
 }
