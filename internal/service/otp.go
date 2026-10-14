@@ -26,21 +26,23 @@ type OTPSender interface {
 }
 
 type OTPService struct {
-	sender   OTPSender
-	fallback OTPSender
-	store    OTPStore
-	key      []byte
+	sender    OTPSender
+	fallback  OTPSender
+	store     OTPStore
+	secretKey []byte
 }
 
 func NewOTPService(
 	sender OTPSender,
 	fallback OTPSender,
 	store OTPStore,
+	secretKey []byte,
 ) *OTPService {
 	return &OTPService{
-		sender:   sender,
-		fallback: fallback,
-		store:    store,
+		sender:    sender,
+		secretKey: secretKey,
+		fallback:  fallback,
+		store:     store,
 	}
 }
 
@@ -66,7 +68,7 @@ func (s *OTPService) generateCodeHash(length int) (*string, error) {
 	if err != nil {
 		return nil, err
 	}
-	codeHash := signHash([]byte(*otp), s.key)
+	codeHash := signHash([]byte(*otp), s.secretKey)
 	code := string(codeHash)
 	return &code, nil
 }
@@ -103,7 +105,7 @@ func (s *OTPService) Send(ctx context.Context, phone string) error {
 const maxAttempts = 3
 
 func (s *OTPService) verifyCodeHash(code string, hash []byte) bool {
-	expected := signHash([]byte(code), s.key)
+	expected := signHash([]byte(code), s.secretKey)
 	return hmac.Equal(hash, expected)
 }
 
