@@ -3,7 +3,7 @@ package redis_otp
 import "github.com/gazizvr/telegram-gateway-auth/internal/domain"
 
 type verificationRedisDTO struct {
-	OTP      string `redis:"otp"`
+	CodeHash string `redis:"code_hash"`
 	Attempts int    `redis:"attempts"`
 }
 
@@ -12,14 +12,14 @@ func (v *verificationRedisDTO) toDomain() *domain.Verification {
 		return nil
 	}
 	return &domain.Verification{
-		OTP:      v.OTP,
+		CodeHash: v.CodeHash,
 		Attempts: v.Attempts,
 	}
 }
 
 func toRedisDTO(v domain.Verification) verificationRedisDTO {
 	return verificationRedisDTO{
-		OTP:      v.OTP,
+		CodeHash: v.CodeHash,
 		Attempts: v.Attempts,
 	}
 }

@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"math/big"
@@ -27,6 +29,7 @@ type OTPService struct {
 	sender   OTPSender
 	fallback OTPSender
 	store    OTPStore
+	key      []byte
 }
 
 func NewOTPService(
@@ -51,10 +54,25 @@ func generateOTP(length int) (*string, error) {
 	return &otp, nil
 }
 
-const (
-	defaultTTL           = 150 * time.Second
-	defaultOTPLength int = 6
-)
+func signHash(message, key []byte) []byte {
+	mac := hmac.New(sha256.New, key)
+	mac.Write(message)
+	hash := mac.Sum(nil)
+	return hash
+}
+
+func (s *OTPService) generateCodeHash(length int) (*string, error) {
+	otp, err := generateOTP(length)
+	if err != nil {
+		return nil, err
+	}
+	codeHash := signHash([]byte(*otp), s.key)
+	code := string(codeHash)
+	return &code, nil
+}
+
+const ttl = 150 * time.Second
+const otpLength int = 6
 
 func (s *OTPService) Send(ctx context.Context, phone string) error {
 	exists, err := s.store.Exists(ctx, phone)
@@ -64,25 +82,30 @@ func (s *OTPService) Send(ctx context.Context, phone string) error {
 	if exists {
 		return domain.ErrMessageAlreadySent
 	}
-	otp, err := generateOTP(defaultOTPLength)
+	codeHash, err := s.generateCodeHash(otpLength)
 	if err != nil {
 		return err
 	}
-	if err := s.sender.Send(ctx, phone, *otp, defaultTTL); err != nil {
+	if err := s.sender.Send(ctx, phone, *codeHash, ttl); err != nil {
 		if errors.Is(err, domain.ErrPhoneNotReachable) ||
 			errors.Is(err, domain.ErrSenderUnavailable) {
-			if err := s.fallback.Send(ctx, phone, *otp, defaultTTL); err != nil {
+			if err := s.fallback.Send(ctx, phone, *codeHash, ttl); err != nil {
 				return err
 			}
 		} else {
 			return err
 		}
 	}
-	verification := domain.Verification{OTP: *otp}
-	return s.store.Set(ctx, phone, verification, defaultTTL)
+	verification := domain.Verification{CodeHash: *codeHash}
+	return s.store.Set(ctx, phone, verification, ttl)
 }
 
 const maxAttempts = 3
+
+func (s *OTPService) verifyCodeHash(code string, hash []byte) bool {
+	expected := signHash([]byte(code), s.key)
+	return hmac.Equal(hash, expected)
+}
 
 func (s *OTPService) Verify(ctx context.Context, phone, code string) error {
 	verification, err := s.store.Get(ctx, phone)
@@ -104,7 +127,7 @@ func (s *OTPService) Verify(ctx context.Context, phone, code string) error {
 		s.store.Delete(ctx, phone)
 		return domain.ErrMaxAttemptsExceeded
 	}
-	if verification.OTP != code {
+	if s.verifyCodeHash(code, []byte(verification.CodeHash)) {
 		return domain.ErrInvalidCode
 	}
 	return s.store.Delete(ctx, phone)

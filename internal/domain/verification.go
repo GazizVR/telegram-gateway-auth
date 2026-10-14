@@ -1,6 +1,6 @@
 package domain
 
 type Verification struct {
-	OTP      string
+	CodeHash string
 	Attempts int
 }
