@@ -93,6 +93,7 @@ func (s *OTPService) Verify(ctx context.Context, phone, code string) error {
 		return domain.ErrOTPNotFound
 	}
 	if verification.Attempts >= maxAttempts {
+		s.store.Delete(ctx, phone)
 		return domain.ErrMaxAttemptsExceeded
 	}
 	attempts, err := s.store.IncrAttempts(ctx, phone)
@@ -100,6 +101,7 @@ func (s *OTPService) Verify(ctx context.Context, phone, code string) error {
 		return err
 	}
 	if attempts > maxAttempts {
+		s.store.Delete(ctx, phone)
 		return domain.ErrMaxAttemptsExceeded
 	}
 	if verification.OTP != code {

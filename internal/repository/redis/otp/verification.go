@@ -3,12 +3,15 @@ package redis_otp
 import "github.com/gazizvr/telegram-gateway-auth/internal/domain"
 
 type verificationRedisDTO struct {
-	OTP      string  `redis:"otp"`
-	Attempts int     `redis:"attempts"`
+	OTP      string `redis:"otp"`
+	Attempts int    `redis:"attempts"`
 }
 
-func (v verificationRedisDTO) toDomain() domain.Verification {
-	return domain.Verification{
+func (v *verificationRedisDTO) toDomain() *domain.Verification {
+	if v == nil {
+		return nil
+	}
+	return &domain.Verification{
 		OTP:      v.OTP,
 		Attempts: v.Attempts,
 	}

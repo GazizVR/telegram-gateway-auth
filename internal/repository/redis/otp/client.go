@@ -2,7 +2,6 @@ package redis_otp
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -25,15 +24,18 @@ func key(phone string) string {
 }
 
 func (s *Store) Get(ctx context.Context, phone string) (*domain.Verification, error) {
-	var verificationDTO verificationRedisDTO
-	if err := s.rdb.HGetAll(ctx, key(phone)).Scan(&verificationDTO); err != nil {
-		if errors.Is(err, redis.Nil) {
-			return nil, domain.ErrOTPNotFound
-		}
+	var verification verificationRedisDTO
+	cmd := s.rdb.HGetAll(ctx, key(phone))
+	if err := cmd.Err(); err != nil {
 		return nil, fmt.Errorf("get verification: %w", err)
 	}
-	verification := verificationDTO.toDomain()
-	return &verification, nil
+	if len(cmd.Val()) < 1 {
+		return nil, domain.ErrOTPNotFound
+	}
+	if err := cmd.Scan(&verification); err != nil {
+		return nil, fmt.Errorf("get verification: %w", err)
+	}
+	return verification.toDomain(), nil
 }
 
 func (s *Store) Exists(ctx context.Context, phone string) (bool, error) {
@@ -62,12 +64,12 @@ func (s *Store) Set(
 	return nil
 }
 
-func (s *Store) IncrAttempts(ctx context.Context, phone string) (int,error) {
-    attempts, err := s.rdb.HIncrBy(ctx, key(phone), "attempts",1).Result()
-    if err != nil {
-        return 0, fmt.Errorf("increment attempts: %w",err)
-    }
-    return int(attempts), err
+func (s *Store) IncrAttempts(ctx context.Context, phone string) (int, error) {
+	attempts, err := s.rdb.HIncrBy(ctx, key(phone), "attempts", 1).Result()
+	if err != nil {
+		return 0, fmt.Errorf("increment attempts: %w", err)
+	}
+	return int(attempts), err
 }
 
 func (s *Store) Delete(ctx context.Context, phone string) error {
