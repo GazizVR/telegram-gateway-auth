@@ -15,7 +15,7 @@ var (
 	ErrMessageAlreadySent  = errors.New("verification message already sent")
 	ErrTooManyRequests     = errors.New("too many requests")
 	ErrGatewayUnavailable  = errors.New("telegram gateway service unavailable")
-    ErrPhoneNotReachable = errors.New("phone number not reachable")
+	ErrPhoneNotReachable   = errors.New("phone number not reachable")
 )
 
 type FloodWaitError struct {

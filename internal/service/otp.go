@@ -15,6 +15,7 @@ type OTPStore interface {
 	Get(ctx context.Context, phone string) (*domain.Verification, error)
 	Exists(ctx context.Context, phone string) (bool, error)
 	Set(ctx context.Context, phone string, verification domain.Verification, ttl time.Duration) error
+    IncrAttempts(ctx context.Context, phone string) (int,error)
 	Delete(ctx context.Context, phone string) error
 }
 
@@ -76,6 +77,8 @@ func (s *OTPService) Send(ctx context.Context, phone string) error {
 	return s.store.Set(ctx, phone, verification, defaultTTL)
 }
 
+const maxAttempts = 3
+
 func (s *OTPService) Verify(ctx context.Context, phone, code string) error {
 	verification, err := s.store.Get(ctx, phone)
 	if err != nil {
@@ -84,6 +87,19 @@ func (s *OTPService) Verify(ctx context.Context, phone, code string) error {
 	if verification == nil || verification.ID == nil {
 		return domain.ErrOTPNotFound
 	}
+    if verification.Attempts >= maxAttempts {
+        return domain.ErrMaxAttemptsExceeded
+    }
+    attempts, err := s.store.IncrAttempts(ctx,phone)
+    if err != nil {
+        return err
+    }
+    if attempts > maxAttempts {
+        return domain.ErrMaxAttemptsExceeded
+    }
+    if verification.OTP != code {
+        return domain.ErrInvalidCode
+    }
 	if err := s.provider.Verify(ctx, *verification.ID, code); err != nil {
 		slog.ErrorContext(ctx, err.Error())
 		return err

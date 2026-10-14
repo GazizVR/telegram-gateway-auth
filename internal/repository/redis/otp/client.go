@@ -62,6 +62,14 @@ func (s *Store) Set(
 	return nil
 }
 
+func (s *Store) IncrAttempts(ctx context.Context, phone string) (int,error) {
+    attempts, err := s.rdb.HIncrBy(ctx, key(phone), "attempts",1).Result()
+    if err != nil {
+        return 0, fmt.Errorf("increment attempts: %w",err)
+    }
+    return int(attempts), err
+}
+
 func (s *Store) Delete(ctx context.Context, phone string) error {
 	if err := s.rdb.Del(ctx, key(phone)).Err(); err != nil {
 		return fmt.Errorf("delete verification: %w", err)
