@@ -5,7 +5,6 @@ import (
 	"time"
 
 	telegramgateway "github.com/gazizvr/go-telegram-gateway"
-	"github.com/gazizvr/telegram-gateway-auth/internal/domain"
 )
 
 type TelegramGateway struct {
@@ -23,7 +22,7 @@ func (c *TelegramGateway) Send(
 	phone string,
 	code string,
 	ttl time.Duration,
-) (*domain.VerificationID, error) {
+) error {
 	resp, err := c.client.CheckSendAbility(
 		ctx,
 		telegramgateway.CheckSendAbilityRequest{
@@ -31,7 +30,7 @@ func (c *TelegramGateway) Send(
 		},
 	)
 	if err != nil {
-		return nil, mapGatewayError(err)
+		return mapGatewayError(err)
 	}
 	ttlSec := int(ttl.Seconds())
 	req := telegramgateway.SendVerificationMessageRequest{
@@ -41,38 +40,7 @@ func (c *TelegramGateway) Send(
 		TTL:         ttlSec,
 	}
 	if _, err := c.client.SendVerificationMessage(ctx, req); err != nil {
-		return nil, mapGatewayError(err)
-	}
-	challenge := domain.VerificationID(resp.RequestID)
-	return &challenge, nil
-}
-
-func (c *TelegramGateway) Verify(
-	ctx context.Context,
-	challenge domain.VerificationID,
-	code string,
-) error {
-	req := telegramgateway.CheckVerificationStatusRequest{
-		RequestID: string(challenge),
-		Code:      code,
-	}
-	resp, err := c.client.CheckVerificationStatus(ctx, req)
-	if err != nil {
 		return mapGatewayError(err)
 	}
-	if resp.VerificationStatus == nil {
-		return domain.ErrInvalidCode
-	}
-	switch resp.VerificationStatus.Status {
-	case telegramgateway.VerificationCodeValid:
-		return nil
-	case telegramgateway.VerificationCodeInvalid:
-		return domain.ErrInvalidCode
-	case telegramgateway.VerificationExpired:
-		return domain.ErrCodeExpired
-	case telegramgateway.VerificationMaxAttempts:
-		return domain.ErrMaxAttemptsExceeded
-	default:
-		return domain.ErrInvalidCode
-	}
+	return nil
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
-	"log/slog"
 	"math/big"
 	"time"
 
@@ -20,8 +19,7 @@ type OTPStore interface {
 }
 
 type OTPProvider interface {
-	Send(ctx context.Context, phone, code string, ttl time.Duration) (*domain.VerificationID, error)
-	Verify(ctx context.Context, id domain.VerificationID, code string) error
+	Send(ctx context.Context, phone, code string, ttl time.Duration) error
 }
 
 type OTPService struct {
@@ -66,14 +64,10 @@ func (s *OTPService) Send(ctx context.Context, phone string) error {
 	if err != nil {
 		return err
 	}
-	verificationID, err := s.provider.Send(ctx, phone, *otp, defaultTTL)
-	if err != nil {
+	if err := s.provider.Send(ctx, phone, *otp, defaultTTL); err != nil {
 		return err
 	}
-	verification := domain.Verification{
-		ID:  verificationID,
-		OTP: *otp,
-	}
+	verification := domain.Verification{OTP: *otp}
 	return s.store.Set(ctx, phone, verification, defaultTTL)
 }
 
@@ -84,7 +78,7 @@ func (s *OTPService) Verify(ctx context.Context, phone, code string) error {
 	if err != nil {
 		return err
 	}
-	if verification == nil || verification.ID == nil {
+	if verification == nil {
 		return domain.ErrOTPNotFound
 	}
     if verification.Attempts >= maxAttempts {
@@ -100,13 +94,5 @@ func (s *OTPService) Verify(ctx context.Context, phone, code string) error {
     if verification.OTP != code {
         return domain.ErrInvalidCode
     }
-	if err := s.provider.Verify(ctx, *verification.ID, code); err != nil {
-		slog.ErrorContext(ctx, err.Error())
-		return err
-	}
-	if err := s.store.Delete(ctx, phone); err != nil {
-		slog.ErrorContext(ctx, err.Error())
-		return err
-	}
-	return nil
+	return s.store.Delete(ctx, phone)
 }
