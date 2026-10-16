@@ -10,6 +10,7 @@ import (
 	"github.com/gazizvr/telegram-gateway-auth/internal/handler"
 	redis_otp "github.com/gazizvr/telegram-gateway-auth/internal/repository/redis/otp"
 	"github.com/gazizvr/telegram-gateway-auth/internal/service"
+	"github.com/gazizvr/telegram-gateway-auth/internal/web"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -34,6 +35,8 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/send-code", otpHandler.Send)
 	mux.HandleFunc("POST /v1/verify-code", otpHandler.Verify)
+	webHandler := web.NewHandler()
+	webHandler.Handle(mux)
 	if err := http.ListenAndServe(config.HTTPAddr, mux); err != nil {
 		log.Fatalln(err)
 	}
