@@ -13,27 +13,37 @@ var tmplFS embed.FS
 //go:embed static
 var staticFS embed.FS
 
-type Handler struct{}
+type Web struct {
+	pages map[string]*template.Template
+}
 
-func NewHandler() *Handler {
-	return &Handler{}
+func New() *Web {
+	pages := make(map[string]*template.Template)
+	var mainPage = template.Must(template.ParseFS(tmplFS, "templates/index.html"))
+	pages["index.html"] = mainPage
+	return &Web{
+		pages: pages,
+	}
 }
 
 type pageData struct {
 	Subject string
 }
 
-func (p *Handler) Handle(mux *http.ServeMux) {
+func (p *Web) Routes(mux *http.ServeMux) {
 	fs := http.FileServerFS(staticFS)
-	mux.Handle("/static/", fs)
-	var tmpl = template.Must(template.ParseFS(tmplFS, "templates/*.html"))
-	mux.HandleFunc("/{$}", func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("GET /static/", fs)
+	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		data := &pageData{
-			Subject: "phone number",
+			Subject: "номер телефона",
 		}
-		if err := tmpl.ExecuteTemplate(w, "index.html", data); err != nil {
-			slog.ErrorContext(r.Context(), err.Error())
-			return
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		page, ok := p.pages["index.html"]
+		if ok {
+			if err := page.ExecuteTemplate(w, "index.html", data); err != nil {
+				slog.ErrorContext(r.Context(), err.Error())
+				return
+			}
 		}
 	})
 }

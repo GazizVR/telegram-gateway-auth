@@ -35,8 +35,8 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/send-code", otpHandler.Send)
 	mux.HandleFunc("POST /v1/verify-code", otpHandler.Verify)
-	webHandler := web.NewHandler()
-	webHandler.Handle(mux)
+	webHandler := web.New()
+	webHandler.Routes(mux)
 	if err := http.ListenAndServe(config.HTTPAddr, mux); err != nil {
 		log.Fatalln(err)
 	}
