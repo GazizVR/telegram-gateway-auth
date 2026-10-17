@@ -1,13 +1,116 @@
 <!DOCTYPE html>
-<html lang="ru">
-    <head>
-        <title>Telegram Gateway Auth</title>
-        <link rel="stylesheet" href="static/styles.css">
-        <link rel="icon" type="image/svg+xml" href="static/favicon.svg">
-    </head>
-    <body>
-        <div>
-            <div class="title-text">Введите ваш {{.Subject}}:</div>
+<html lang="ru" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Telegram Gateway Auth — Live Demo</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+
+  <div class="topbar">
+    <div class="brand-pill">
+      <span>⚡ Smart OTP Gateway</span>
+    </div>
+    <div class="controls">
+      <button class="icon-btn" id="lang-btn" type="button">EN</button>
+      <button class="icon-btn" id="theme-btn" type="button">🌙</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="tg-logo-wrap">
+      <img src="/static/favicon.svg" alt="Smart OTP Gateway" />
+    </div>
+
+    <div id="alert-box" class="alert-box"></div>
+
+    <div id="step-phone">
+      <h1 data-i18n="step1_title">Авторизация</h1>
+      <p class="subtitle" data-i18n="step1_desc">
+        Введите номер телефона. Сервис отправит код через официальный шлюз Telegram, а при недоступности — автоматически через SMS.
+      </p>
+
+      <form id="form-send">
+        <div class="input-group">
+          <label class="input-label" for="phone-input" data-i18n="phone_label">Номер телефона</label>
+          <input
+            type="tel"
+            id="phone-input"
+            class="tg-input"
+            placeholder="+998 90 123 45 67"
+            value="+998"
+            required
+            autocomplete="tel"
+          />
         </div>
-    </body>
+
+        <button type="submit" id="send-btn" class="tg-btn" data-i18n="send_btn">
+          Получить код
+        </button>
+      </form>
+    </div>
+
+    <div id="step-verify" class="hidden">
+      <h1 data-i18n="step2_title">Введите код</h1>
+      <p class="subtitle" id="verify-subtitle"></p>
+
+      <form id="form-verify">
+        <div class="input-group">
+          <label class="input-label" for="code-input" data-i18n="code_label">Код подтверждения</label>
+          <input
+            type="text"
+            id="code-input"
+            class="tg-input code-input"
+            placeholder="••••••"
+            maxlength="6"
+            inputmode="numeric"
+            required
+            autocomplete="one-time-code"
+          />
+        </div>
+
+        <button type="submit" id="verify-btn" class="tg-btn" data-i18n="verify_btn">
+          Подтвердить
+        </button>
+        <button type="button" id="change-phone-btn" class="tg-btn tg-btn-secondary" data-i18n="change_phone_btn">
+          Изменить номер
+        </button>
+      </form>
+
+      <p class="timer-text" id="timer-label"></p>
+    </div>
+
+    <div id="step-success" class="hidden">
+      <h1 data-i18n="step3_title">✅ Номер подтверждён!</h1>
+      <p class="subtitle" data-i18n="step3_desc">
+        Проверка выполнена локально в Redis за ~1 мс без дополнительных сетевых запросов к внешним шлюзам.
+      </p>
+
+      <button type="button" id="test-again-btn" class="tg-btn" data-i18n="test_again_btn">
+        Протестировать снова
+      </button>
+    </div>
+  </div>
+
+  <div class="roi-card">
+    <div class="roi-header">
+      <span class="roi-title" data-i18n="roi_title">Экономика для бизнеса</span>
+      <span class="roi-SaveBadge" data-i18n="roi_badge">Экономия до 70%</span>
+    </div>
+    <div class="roi-grid">
+      <div class="roi-item">
+        <div class="roi-item-label">Telegram Gateway</div>
+        <div class="roi-item-value" style="color: var(--tg-blue);">$0.01 <span style="font-size:12px;font-weight:400;">/ код</span></div>
+      </div>
+      <div class="roi-item">
+        <div class="roi-item-label" data-i18n="sms_label">Обычный SMS-шлюз</div>
+        <div class="roi-item-value">$0.03 <span style="font-size:12px;font-weight:400;">/ SMS</span></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
 </html>
