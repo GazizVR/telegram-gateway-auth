@@ -3,7 +3,6 @@ const API = {
   verify: '/v1/verify-code'
 };
 
-// Matches otpService TTL on the backend (150s).
 const CODE_TTL_SECONDS = 150;
 
 let currentPhone = '';
@@ -99,6 +98,64 @@ const ERROR_KEYS = {
 // Errors after which the current OTP session is over.
 const SESSION_ENDED = ['MAX_ATTEMPTS_EXCEEDED', 'OTP_NOT_FOUND', 'CODE_EXPIRED'];
 
+// ---- Theme: saved choice, otherwise the system preference ----
+const THEME_KEY = 'theme';
+const systemDark = window.matchMedia('(prefers-color-scheme: dark)');
+
+function savedTheme() {
+  try {
+    const v = localStorage.getItem(THEME_KEY);
+    return v === 'light' || v === 'dark' ? v : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  const btn = document.getElementById('theme-btn');
+  if (btn) btn.textContent = theme === 'dark' ? '☀️' : '🌙';
+}
+
+function toggleTheme() {
+  const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  applyTheme(next);
+  try { localStorage.setItem(THEME_KEY, next); } catch (_) {}
+}
+
+// ---- Phone: formatting and validation ----
+// Uses libphonenumber-js when /static/libphonenumber-min.js is loaded,
+// otherwise falls back to a simple formatter and an E.164 regex.
+function formatPhone(raw) {
+  const digits = raw.replace(/\D/g, '').slice(0, 15); // E.164: up to 15 digits
+  if (!digits) return '';
+
+  const lib = window.libphonenumber;
+  if (lib) return new lib.AsYouType().input('+' + digits);
+
+  const groups = [3, 2, 3, 2, 2]; // 998 90 123 45 67
+  const parts = [];
+  let pos = 0;
+  for (const size of groups) {
+    if (pos >= digits.length) break;
+    parts.push(digits.slice(pos, pos + size));
+    pos += size;
+  }
+  if (pos < digits.length) parts.push(digits.slice(pos));
+  return '+' + parts.join(' ');
+}
+
+// Returns the number in E.164 format or null if it is invalid.
+function normalizePhone(raw) {
+  const lib = window.libphonenumber;
+  if (lib) {
+    const parsed = lib.parsePhoneNumberFromString(raw);
+    return parsed && parsed.isValid() ? parsed.number : null;
+  }
+  const e164 = '+' + raw.replace(/\D/g, '');
+  return /^\+[1-9]\d{6,14}$/.test(e164) ? e164 : null;
+}
+
 function t(key) {
   return I18N[currentLang][key];
 }
@@ -139,7 +196,12 @@ async function handleSendOTP(e) {
   e.preventDefault();
   hideAlert();
 
-  currentPhone = document.getElementById('phone-input').value.replace(/\s+/g, '');
+  const phone = normalizePhone(document.getElementById('phone-input').value);
+  if (!phone) {
+    showAlert(t('err_invalid_phone'));
+    return;
+  }
+  currentPhone = phone;
 
   const btn = document.getElementById('send-btn');
   btn.disabled = true;
@@ -166,7 +228,7 @@ async function handleSendOTP(e) {
 }
 
 function updateVerifySubtitle() {
-  document.getElementById('verify-subtitle').textContent = t('step2_SentTo') + currentPhone;
+  document.getElementById('verify-subtitle').textContent = t('step2_SentTo') + formatPhone(currentPhone);
 }
 
 function renderVerifyStep(startTimer) {
@@ -273,14 +335,20 @@ function toggleLanguage() {
   }
 }
 
-function toggleTheme() {
-  const html = document.documentElement;
-  const next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-  html.setAttribute('data-theme', next);
-  document.getElementById('theme-btn').textContent = next === 'dark' ? '☀️' : '🌙';
-}
-
 document.addEventListener('DOMContentLoaded', () => {
+  applyTheme(savedTheme() || (systemDark.matches ? 'dark' : 'light'));
+  // Follow the system theme until the user picks one manually.
+  systemDark.addEventListener('change', (e) => {
+    if (!savedTheme()) applyTheme(e.matches ? 'dark' : 'light');
+  });
+
+  const phoneInput = document.getElementById('phone-input');
+  phoneInput.addEventListener('input', (e) => {
+    // Do not reformat while editing in the middle, so the caret does not jump.
+    if (e.target.selectionStart !== e.target.value.length) return;
+    e.target.value = formatPhone(e.target.value);
+  });
+
   document.getElementById('form-send').addEventListener('submit', handleSendOTP);
   document.getElementById('form-verify').addEventListener('submit', handleVerifyOTP);
   document.getElementById('change-phone-btn').addEventListener('click', resetToPhone);

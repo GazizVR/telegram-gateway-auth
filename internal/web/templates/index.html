@@ -1,10 +1,20 @@
 <!DOCTYPE html>
-<html lang="ru" data-theme="light">
+<html lang="ru">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Telegram Gateway Auth — Live Demo</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+  <script>
+    (function () {
+      var t = null;
+      try { t = localStorage.getItem('theme'); } catch (e) {}
+      if (t !== 'light' && t !== 'dark') {
+        t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      }
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
   <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body>
@@ -40,7 +50,6 @@
             id="phone-input"
             class="tg-input"
             placeholder="+998 90 123 45 67"
-            value="+998"
             required
             autocomplete="tel"
           />
