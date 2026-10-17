@@ -2,6 +2,7 @@ package redis_otp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -19,27 +20,23 @@ func NewStore(rdb *redis.Client) *Store {
 	}
 }
 
-func key(phone string) string {
+func codeHashKey(phone string) string {
 	return fmt.Sprintf("otp:%s", phone)
 }
 
-func (s *Store) Get(ctx context.Context, phone string) (*domain.Verification, error) {
-	var verification verificationRedisDTO
-	cmd := s.rdb.HGetAll(ctx, key(phone))
-	if err := cmd.Err(); err != nil {
-		return nil, fmt.Errorf("get verification: %w", err)
+func (s *Store) Get(ctx context.Context, phone string) ([]byte, error) {
+	codeHash, err := s.rdb.Get(ctx, codeHashKey(phone)).Bytes()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return nil, domain.ErrOTPNotFound
+		}
+		return nil, fmt.Errorf("get code hash: %w", err)
 	}
-	if len(cmd.Val()) < 1 {
-		return nil, domain.ErrOTPNotFound
-	}
-	if err := cmd.Scan(&verification); err != nil {
-		return nil, fmt.Errorf("get verification: %w", err)
-	}
-	return verification.toDomain(), nil
+	return codeHash, nil
 }
 
 func (s *Store) Exists(ctx context.Context, phone string) (bool, error) {
-	count, err := s.rdb.Exists(ctx, key(phone)).Result()
+	count, err := s.rdb.Exists(ctx, codeHashKey(phone)).Result()
 	if err != nil {
 		return false, fmt.Errorf("check exists: %w", err)
 	}
@@ -49,32 +46,51 @@ func (s *Store) Exists(ctx context.Context, phone string) (bool, error) {
 func (s *Store) Set(
 	ctx context.Context,
 	phone string,
-	verification domain.Verification,
+	codeHash []byte,
 	ttl time.Duration,
 ) error {
-	verificationDTO := toRedisDTO(verification)
-	_, err := s.rdb.TxPipelined(ctx, func(p redis.Pipeliner) error {
-		p.HSet(ctx, key(phone), verificationDTO)
-		p.Expire(ctx, key(phone), ttl)
-		return nil
-	})
+	exists, err := s.rdb.SetNX(ctx, codeHashKey(phone), codeHash, ttl).Result()
 	if err != nil {
-		return fmt.Errorf("set verification: %w", err)
+		return fmt.Errorf("set code hash: %w", err)
+	}
+	if exists {
+		return domain.ErrMessageAlreadySent
 	}
 	return nil
 }
 
-func (s *Store) IncrAttempts(ctx context.Context, phone string) (int, error) {
-	attempts, err := s.rdb.HIncrBy(ctx, key(phone), "attempts", 1).Result()
-	if err != nil {
-		return 0, fmt.Errorf("increment attempts: %w", err)
+func (s *Store) Delete(ctx context.Context, phone string) error {
+	if err := s.rdb.Del(ctx, codeHashKey(phone)).Err(); err != nil {
+		return fmt.Errorf("delete code hash: %w", err)
 	}
-	return int(attempts), err
+	return nil
 }
 
-func (s *Store) Delete(ctx context.Context, phone string) error {
-	if err := s.rdb.Del(ctx, key(phone)).Err(); err != nil {
-		return fmt.Errorf("delete verification: %w", err)
+func (s *Store) GetTTL(ctx context.Context, phone string) (*time.Duration, error) {
+	ttl, err := s.rdb.TTL(ctx, codeHashKey(phone)).Result()
+	if err != nil {
+		return nil, fmt.Errorf("get code hash ttl: %w", err)
+	}
+	return &ttl, nil
+}
+
+func codeAttemptsKey(phone string) string {
+	return "otp:attempts:" + phone
+}
+
+func (s *Store) Increment(ctx context.Context, phone string, ttl time.Duration) (int, error) {
+	pipe := s.rdb.TxPipeline()
+	key := codeAttemptsKey(phone)
+	cmd := pipe.Incr(ctx, key)
+	pipe.ExpireNX(ctx, key, ttl)
+	if _, err := pipe.Exec(ctx); err != nil {
+		return 0, fmt.Errorf("increment attempts: %w", err)
+	}
+	return int(cmd.Val()), nil
+}
+func (s *Store) Release(ctx context.Context, phone string) error {
+	if err := s.rdb.Del(ctx, codeAttemptsKey(phone)).Err(); err != nil {
+		return fmt.Errorf("release attempts: %w", err)
 	}
 	return nil
 }

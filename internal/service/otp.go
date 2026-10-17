@@ -13,12 +13,17 @@ import (
 	"github.com/gazizvr/telegram-gateway-auth/internal/domain"
 )
 
-type OTPStore interface {
-	Get(ctx context.Context, phone string) (*domain.Verification, error)
+type CodeHashStore interface {
+	Get(ctx context.Context, phone string) ([]byte, error)
 	Exists(ctx context.Context, phone string) (bool, error)
-	Set(ctx context.Context, phone string, verification domain.Verification, ttl time.Duration) error
-	IncrAttempts(ctx context.Context, phone string) (int, error)
+	Set(ctx context.Context, phone string, codeHash []byte, ttl time.Duration) error
 	Delete(ctx context.Context, phone string) error
+	GetTTL(ctx context.Context, phone string) (*time.Duration, error)
+}
+
+type AttemptsLimiter interface {
+	Increment(ctx context.Context, phone string, ttl time.Duration) (int, error)
+	Release(ctx context.Context, phone string) error
 }
 
 type OTPSender interface {
@@ -26,61 +31,64 @@ type OTPSender interface {
 }
 
 type OTPService struct {
-	sender    OTPSender
-	fallback  OTPSender
-	store     OTPStore
-	secretKey []byte
-    ttl time.Duration
-    otpLength int
-    maxAttempts int
+	sender      OTPSender
+	fallback    OTPSender
+	store       CodeHashStore
+	limiter     AttemptsLimiter
+	secretKey   []byte
+	ttl         time.Duration
+	otpLength   int
+	maxAttempts int
 }
 
 type Option func(*OTPService)
 
 func WithTTL(d time.Duration) Option {
-    return func(src *OTPService) {
-        src.ttl = d
-    }
+	return func(src *OTPService) {
+		src.ttl = d
+	}
 }
 
 func WithOTPLength(l int) Option {
-    return func(src *OTPService) {
-        src.otpLength = l
-    }
+	return func(src *OTPService) {
+		src.otpLength = l
+	}
 }
 
 func WithMaxAttempts(a int) Option {
-    return func(src *OTPService) {
-        src.maxAttempts = a
-    }
+	return func(src *OTPService) {
+		src.maxAttempts = a
+	}
 }
 
 const (
-    defaultTTL = 150 * time.Second
-    defaultOTPLength int = 6
-    defaultMaxAttempts = 3
+	defaultTTL             = 150 * time.Second
+	defaultOTPLength   int = 6
+	defaultMaxAttempts     = 3
 )
 
 func NewOTPService(
 	sender OTPSender,
 	fallback OTPSender,
-	store OTPStore,
+	store CodeHashStore,
+	limiter AttemptsLimiter,
 	secretKey []byte,
-    ops ...Option,
+	ops ...Option,
 ) *OTPService {
-    service := &OTPService{
-		sender:    sender,
-		secretKey: secretKey,
-		fallback:  fallback,
-		store:     store,
-        ttl: defaultTTL,
-        otpLength: defaultOTPLength,
-        maxAttempts: defaultMaxAttempts,
+	service := &OTPService{
+		sender:      sender,
+		secretKey:   secretKey,
+		fallback:    fallback,
+		store:       store,
+		limiter:     limiter,
+		ttl:         defaultTTL,
+		otpLength:   defaultOTPLength,
+		maxAttempts: defaultMaxAttempts,
 	}
-    for _, opt := range ops {
-        opt(service)
-    }
-    return service
+	for _, opt := range ops {
+		opt(service)
+	}
+	return service
 }
 
 func generateOTP(length int) (*string, error) {
@@ -122,9 +130,7 @@ func (s *OTPService) Send(ctx context.Context, phone string) error {
 			return err
 		}
 	}
-	codeHash := signHash([]byte(*code), s.secretKey)
-	verification := domain.Verification{CodeHash: string(codeHash)}
-	return s.store.Set(ctx, phone, verification, s.ttl)
+	return s.store.Set(ctx, phone, signHash([]byte(*code), s.secretKey), s.ttl)
 }
 
 func (s *OTPService) verifyCodeHash(code string, hash []byte) bool {
@@ -133,26 +139,27 @@ func (s *OTPService) verifyCodeHash(code string, hash []byte) bool {
 }
 
 func (s *OTPService) Verify(ctx context.Context, phone, code string) error {
-	verification, err := s.store.Get(ctx, phone)
+	codeHash, err := s.store.Get(ctx, phone)
 	if err != nil {
 		return err
 	}
-	if verification == nil {
+	if codeHash == nil {
 		return domain.ErrOTPNotFound
 	}
-	if verification.Attempts >= s.maxAttempts {
-		s.store.Delete(ctx, phone)
-		return domain.ErrMaxAttemptsExceeded
-	}
-	attempts, err := s.store.IncrAttempts(ctx, phone)
+	currentTTL, err := s.store.GetTTL(ctx, phone)
 	if err != nil {
 		return err
 	}
-	if attempts > s.maxAttempts {
+	attempts, err := s.limiter.Increment(ctx, phone, *currentTTL)
+	if err != nil {
+		return err
+	}
+	if attempts >= s.maxAttempts {
 		s.store.Delete(ctx, phone)
+		s.limiter.Release(ctx, phone)
 		return domain.ErrMaxAttemptsExceeded
 	}
-	if !s.verifyCodeHash(code, []byte(verification.CodeHash)) {
+	if !s.verifyCodeHash(code, codeHash) {
 		return domain.ErrInvalidCode
 	}
 	return s.store.Delete(ctx, phone)
