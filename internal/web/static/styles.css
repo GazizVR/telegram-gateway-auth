@@ -71,20 +71,92 @@ body {
 }
 
 .icon-btn {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  color: var(--text-main);
-  padding: 6px 11px;
+  color: var(--text-muted);
   border-radius: 10px;
-  font-size: 12px;
-  font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: border-color 0.15s ease, color 0.15s ease;
 }
 
 .icon-btn:hover {
   border-color: var(--tg-blue);
   color: var(--tg-blue);
+}
+
+/* Theme icon: show the icon of the theme you will switch to. */
+.theme-btn .i-sun { display: none; }
+[data-theme="dark"] .theme-btn .i-moon { display: none; }
+[data-theme="dark"] .theme-btn .i-sun { display: block; }
+
+/* Language switch: segmented control with a sliding thumb. */
+.lang-switch {
+  --i: 0;
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  height: 34px;
+  padding: 2px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+}
+
+.lang-thumb {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 2px;
+  width: calc((100% - 4px) / 3);
+  background: var(--tg-blue-light);
+  border-radius: 8px;
+  transform: translateX(calc(var(--i) * 100%));
+}
+
+.lang-switch.ready .lang-thumb {
+  transition: transform 0.2s ease;
+}
+
+.lang-opt {
+  position: relative;
+  z-index: 1;
+  min-width: 36px;
+  padding: 0 8px;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.lang-opt:hover {
+  color: var(--text-main);
+}
+
+.lang-opt[aria-checked="true"] {
+  color: var(--tg-blue);
+}
+
+.icon-btn:focus-visible,
+.lang-opt:focus-visible,
+.tg-btn:focus-visible {
+  outline: 2px solid var(--tg-blue);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lang-switch.ready .lang-thumb,
+  body {
+    transition: none;
+  }
 }
 
 .card {
@@ -223,65 +295,6 @@ h1 {
 .alert-box.info {
   background: var(--tg-blue-light);
   color: var(--tg-blue);
-}
-
-.roi-card {
-  width: 100%;
-  max-width: 420px;
-  margin-top: 16px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius);
-  padding: 18px 22px;
-  box-shadow: var(--shadow);
-}
-
-.roi-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-}
-
-.roi-title {
-  font-size: 13px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-  color: var(--text-muted);
-}
-
-.roi-SaveBadge {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--success);
-  background: var(--success-bg);
-  padding: 3px 8px;
-  border-radius: 6px;
-}
-
-.roi-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin-top: 8px;
-}
-
-.roi-item {
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: var(--bg-page);
-}
-
-.roi-item-label {
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-.roi-item-value {
-  font-size: 16px;
-  font-weight: 700;
-  margin-top: 2px;
 }
 
 .hidden {
