@@ -30,20 +30,57 @@ type OTPService struct {
 	fallback  OTPSender
 	store     OTPStore
 	secretKey []byte
+    ttl time.Duration
+    otpLength int
+    maxAttempts int
 }
+
+type Option func(*OTPService)
+
+func WithTTL(d time.Duration) Option {
+    return func(src *OTPService) {
+        src.ttl = d
+    }
+}
+
+func WithOTPLength(l int) Option {
+    return func(src *OTPService) {
+        src.otpLength = l
+    }
+}
+
+func WithMaxAttempts(a int) Option {
+    return func(src *OTPService) {
+        src.maxAttempts = a
+    }
+}
+
+const (
+    defaultTTL = 150 * time.Second
+    defaultOTPLength int = 6
+    defaultMaxAttempts = 3
+)
 
 func NewOTPService(
 	sender OTPSender,
 	fallback OTPSender,
 	store OTPStore,
 	secretKey []byte,
+    ops ...Option,
 ) *OTPService {
-	return &OTPService{
+    service := &OTPService{
 		sender:    sender,
 		secretKey: secretKey,
 		fallback:  fallback,
 		store:     store,
+        ttl: defaultTTL,
+        otpLength: defaultOTPLength,
+        maxAttempts: defaultMaxAttempts,
 	}
+    for _, opt := range ops {
+        opt(service)
+    }
+    return service
 }
 
 func generateOTP(length int) (*string, error) {
@@ -63,9 +100,6 @@ func signHash(message, key []byte) []byte {
 	return hash
 }
 
-const ttl = 150 * time.Second
-const otpLength int = 6
-
 func (s *OTPService) Send(ctx context.Context, phone string) error {
 	exists, err := s.store.Exists(ctx, phone)
 	if err != nil {
@@ -74,14 +108,14 @@ func (s *OTPService) Send(ctx context.Context, phone string) error {
 	if exists {
 		return domain.ErrMessageAlreadySent
 	}
-	code, err := generateOTP(otpLength)
+	code, err := generateOTP(s.otpLength)
 	if err != nil {
 		return err
 	}
-	if err := s.sender.Send(ctx, phone, *code, ttl); err != nil {
+	if err := s.sender.Send(ctx, phone, *code, s.ttl); err != nil {
 		if errors.Is(err, domain.ErrPhoneNotReachable) ||
 			errors.Is(err, domain.ErrSenderUnavailable) {
-			if err := s.fallback.Send(ctx, phone, *code, ttl); err != nil {
+			if err := s.fallback.Send(ctx, phone, *code, s.ttl); err != nil {
 				return err
 			}
 		} else {
@@ -90,10 +124,8 @@ func (s *OTPService) Send(ctx context.Context, phone string) error {
 	}
 	codeHash := signHash([]byte(*code), s.secretKey)
 	verification := domain.Verification{CodeHash: string(codeHash)}
-	return s.store.Set(ctx, phone, verification, ttl)
+	return s.store.Set(ctx, phone, verification, s.ttl)
 }
-
-const maxAttempts = 3
 
 func (s *OTPService) verifyCodeHash(code string, hash []byte) bool {
 	expected := signHash([]byte(code), s.secretKey)
@@ -108,7 +140,7 @@ func (s *OTPService) Verify(ctx context.Context, phone, code string) error {
 	if verification == nil {
 		return domain.ErrOTPNotFound
 	}
-	if verification.Attempts >= maxAttempts {
+	if verification.Attempts >= s.maxAttempts {
 		s.store.Delete(ctx, phone)
 		return domain.ErrMaxAttemptsExceeded
 	}
@@ -116,7 +148,7 @@ func (s *OTPService) Verify(ctx context.Context, phone, code string) error {
 	if err != nil {
 		return err
 	}
-	if attempts > maxAttempts {
+	if attempts > s.maxAttempts {
 		s.store.Delete(ctx, phone)
 		return domain.ErrMaxAttemptsExceeded
 	}
