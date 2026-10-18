@@ -1,3 +1,5 @@
+// Command genkey prints a random 32-byte base64-encoded key
+// suitable for use as SECRET_KEY.
 package main
 
 import (

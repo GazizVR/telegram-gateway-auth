@@ -1,3 +1,8 @@
+// Command server runs the OTP verification HTTP service.
+//
+// It sends codes through Telegram Gateway, falls back to Eskiz SMS,
+// and stores code hashes in Redis or Valkey. Configuration is read from
+// environment variables; see package config.
 package main
 
 import (

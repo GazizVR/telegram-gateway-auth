@@ -1,3 +1,4 @@
+// Package web serves the embedded demo page and its static assets.
 package web
 
 import (
@@ -11,12 +12,15 @@ var tmplFS embed.FS
 //go:embed static
 var staticFS embed.FS
 
-type Web struct {}
+// Web serves the demo page.
+type Web struct{}
 
+// New returns a Web.
 func New() *Web {
 	return &Web{}
 }
 
+// Routes registers GET / and GET /static/ on mux.
 func (p *Web) Routes(mux *http.ServeMux) {
 	fs := http.FileServerFS(staticFS)
 	mux.Handle("GET /static/", fs)

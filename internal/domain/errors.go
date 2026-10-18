@@ -1,3 +1,4 @@
+// Package domain defines the errors shared across the service layers.
 package domain
 
 import (
@@ -6,6 +7,8 @@ import (
 	"time"
 )
 
+// Sentinel errors. Senders and stores return them, the service reacts to them,
+// and the HTTP handler maps them to response codes.
 var (
 	ErrInvalidPhoneNumber  = errors.New("invalid phone number")
 	ErrOTPNotFound         = errors.New("otp session not found or expired")
@@ -18,7 +21,10 @@ var (
 	ErrPhoneNotReachable   = errors.New("phone number not reachable")
 )
 
+// FloodWaitError reports that sending is rate limited.
+// It unwraps to ErrTooManyRequests.
 type FloodWaitError struct {
+	// WaitTime is how long to wait before retrying. Zero if unknown.
 	WaitTime time.Duration
 }
 

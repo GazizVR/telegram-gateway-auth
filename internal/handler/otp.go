@@ -1,3 +1,4 @@
+// Package handler exposes the OTP service over HTTP.
 package handler
 
 import (
@@ -6,15 +7,18 @@ import (
 	"net/http"
 )
 
+// OTPService is the business logic used by OTPHandler.
 type OTPService interface {
 	Send(ctx context.Context, phone string) error
 	Verify(ctx context.Context, phone, code string) error
 }
 
+// OTPHandler serves the send-code and verify-code endpoints.
 type OTPHandler struct {
 	src OTPService
 }
 
+// NewOTPHandler returns an OTPHandler backed by service.
 func NewOTPHandler(service OTPService) *OTPHandler {
 	return &OTPHandler{
 		src: service,
@@ -29,6 +33,7 @@ type sendResponse struct {
 	OK bool `json:"ok"`
 }
 
+// Send handles POST /v1/send-code with body {"phone": "..."}.
 func (h *OTPHandler) Send(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -58,6 +63,7 @@ type verifyResponse struct {
 	OK bool `json:"ok"`
 }
 
+// Verify handles POST /v1/verify-code with body {"phone": "...", "code": "..."}.
 func (h *OTPHandler) Verify(
 	w http.ResponseWriter,
 	r *http.Request,

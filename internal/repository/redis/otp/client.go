@@ -1,3 +1,5 @@
+// Package redis_otp stores OTP state in Redis or Valkey:
+// code hashes, verification attempts and send rate limits.
 package redis_otp
 
 import (
@@ -10,13 +12,16 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+// Store implements the storage and limiter interfaces of the service package.
 type Store struct {
 	rdb               *redis.Client
 	maxHourlyAttempts int
 }
 
+// Option configures a Store.
 type Option func(*Store)
 
+// WithMaxHourlyAttempts sets the hourly send limit per phone number. Default is 4.
 func WithMaxHourlyAttempts(a int) Option {
 	return func(s *Store) {
 		s.maxHourlyAttempts = a
@@ -25,6 +30,7 @@ func WithMaxHourlyAttempts(a int) Option {
 
 const defaultMaxHourlyAttempts = 4
 
+// NewStore returns a Store that uses rdb.
 func NewStore(
 	rdb *redis.Client,
 	ops ...Option,
@@ -43,6 +49,7 @@ func codeHashKey(phone string) string {
 	return fmt.Sprintf("otp:%s", phone)
 }
 
+// Get returns the stored code hash, or domain.ErrOTPNotFound if none exists.
 func (s *Store) Get(ctx context.Context, phone string) ([]byte, error) {
 	codeHash, err := s.rdb.Get(ctx, codeHashKey(phone)).Bytes()
 	if err != nil {
@@ -54,6 +61,7 @@ func (s *Store) Get(ctx context.Context, phone string) ([]byte, error) {
 	return codeHash, nil
 }
 
+// Exists reports whether a code hash is stored for phone.
 func (s *Store) Exists(ctx context.Context, phone string) (bool, error) {
 	count, err := s.rdb.Exists(ctx, codeHashKey(phone)).Result()
 	if err != nil {
@@ -62,6 +70,8 @@ func (s *Store) Exists(ctx context.Context, phone string) (bool, error) {
 	return count > 0, nil
 }
 
+// Set stores codeHash for ttl. It returns domain.ErrMessageAlreadySent
+// if a code already exists for phone.
 func (s *Store) Set(
 	ctx context.Context,
 	phone string,
@@ -78,6 +88,7 @@ func (s *Store) Set(
 	return nil
 }
 
+// Delete removes the code hash for phone.
 func (s *Store) Delete(ctx context.Context, phone string) error {
 	if err := s.rdb.Del(ctx, codeHashKey(phone)).Err(); err != nil {
 		return fmt.Errorf("delete code hash: %w", err)
@@ -85,6 +96,7 @@ func (s *Store) Delete(ctx context.Context, phone string) error {
 	return nil
 }
 
+// GetTTL returns the remaining lifetime of the code hash for phone.
 func (s *Store) GetTTL(ctx context.Context, phone string) (*time.Duration, error) {
 	ttl, err := s.rdb.TTL(ctx, codeHashKey(phone)).Result()
 	if err != nil {
@@ -97,6 +109,8 @@ func codeAttemptsKey(phone string) string {
 	return "otp:attempts:" + phone
 }
 
+// Increment counts a verification attempt and returns the new total.
+// The counter expires after ttl.
 func (s *Store) Increment(ctx context.Context, phone string, ttl time.Duration) (int, error) {
 	pipe := s.rdb.TxPipeline()
 	key := codeAttemptsKey(phone)
@@ -107,6 +121,7 @@ func (s *Store) Increment(ctx context.Context, phone string, ttl time.Duration) 
 	}
 	return int(cmd.Val()), nil
 }
+// Release resets the verification attempt counter for phone.
 func (s *Store) Release(ctx context.Context, phone string) error {
 	if err := s.rdb.Del(ctx, codeAttemptsKey(phone)).Err(); err != nil {
 		return fmt.Errorf("release attempts: %w", err)
@@ -122,6 +137,8 @@ func hourlyCooldownKey(phone string) string {
 	return "otp:hourly:" + phone
 }
 
+// CanSend returns a *domain.FloodWaitError if phone is in the one-minute
+// cooldown or has exceeded the hourly send limit.
 func (s *Store) CanSend(ctx context.Context, phone string) error {
 	attempts, err := s.rdb.Get(ctx, hourlyCooldownKey(phone)).Int()
 	if err != nil {
@@ -149,6 +166,8 @@ func (s *Store) CanSend(ctx context.Context, phone string) error {
 	}
 	return nil
 }
+// RecordSend starts the one-minute cooldown and counts the send
+// toward the hourly limit.
 func (s *Store) RecordSend(ctx context.Context, phone string) error {
 	tx := s.rdb.TxPipeline()
 	cmd := tx.SetNX(ctx, cooldownKey(phone), "", time.Minute)

@@ -14,6 +14,7 @@ const (
 	tokenTTL = 29*24*60*60 + 23*60*60 // seconds
 )
 
+// Errors returned by Client methods.
 var (
 	ErrUnauthorized = errors.New("eskiz: unauthorized – token is invalid or expired")
 	ErrEmptyToken   = errors.New("eskiz: received empty token from server")

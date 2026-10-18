@@ -1,3 +1,5 @@
+// Package adapter connects the OTP service to external senders
+// and translates their errors into domain errors.
 package adapter
 
 import (
@@ -7,16 +9,20 @@ import (
 	telegramgateway "github.com/gazizvr/go-telegram-gateway"
 )
 
+// TelegramSender delivers codes through Telegram Gateway.
 type TelegramSender struct {
 	client *telegramgateway.Client
 }
 
+// NewTelegramSender returns a TelegramSender that uses client.
 func NewTelegramSender(client *telegramgateway.Client) *TelegramSender {
 	return &TelegramSender{
 		client: client,
 	}
 }
 
+// Send checks that the phone can receive a Telegram message,
+// then sends code with the given ttl.
 func (c *TelegramSender) Send(
 	ctx context.Context,
 	phone string,

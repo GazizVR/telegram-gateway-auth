@@ -1,3 +1,4 @@
+// Package config loads service configuration from environment variables.
 package config
 
 import (
@@ -6,6 +7,10 @@ import (
 	"os"
 )
 
+// Config holds the service settings read from the environment.
+//
+// Optional fields are RedisPassword, EskizEmail and EskizPassword.
+// SMS fallback is disabled when either Eskiz field is empty.
 type Config struct {
 	Token         string
 	SecretKey     string
@@ -16,6 +21,7 @@ type Config struct {
 	EskizPassword string
 }
 
+// Errors returned by Load for a missing required variable.
 var (
 	ErrMissingToken     = errors.New("required token is not set")
 	ErrMissingHTTPAddr  = errors.New("required http addr is not set")
@@ -23,6 +29,9 @@ var (
 	ErrMissingSecretKey = errors.New("required secret key is not set")
 )
 
+// Load reads TOKEN, SECRET_KEY, HTTP_ADDR and REDIS_ADDR, which are required,
+// and REDIS_PASSWORD, ESKIZ_EMAIL and ESKIZ_PASSWORD, which are optional.
+// The returned error wraps the matching ErrMissing* value.
 func Load() (*Config, error) {
 	token := os.Getenv("TOKEN")
 	if token == "" {

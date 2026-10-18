@@ -1,3 +1,4 @@
+// Package eskiz is a client for the Eskiz SMS gateway API (https://eskiz.uz).
 package eskiz
 
 import (

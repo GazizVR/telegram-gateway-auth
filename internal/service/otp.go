@@ -1,3 +1,4 @@
+// Package service implements OTP generation, delivery and verification.
 package service
 
 import (
@@ -13,6 +14,7 @@ import (
 	"github.com/gazizvr/telegram-gateway-auth/internal/domain"
 )
 
+// CodeHashStore persists code hashes.
 type CodeHashStore interface {
 	Get(ctx context.Context, phone string) ([]byte, error)
 	Exists(ctx context.Context, phone string) (bool, error)
@@ -21,20 +23,25 @@ type CodeHashStore interface {
 	GetTTL(ctx context.Context, phone string) (*time.Duration, error)
 }
 
+// AttemptsLimiter counts failed verification attempts.
 type AttemptsLimiter interface {
 	Increment(ctx context.Context, phone string, ttl time.Duration) (int, error)
 	Release(ctx context.Context, phone string) error
 }
 
+// RateLimiter limits how often codes can be sent to one phone number.
 type RateLimiter interface {
 	CanSend(ctx context.Context, phone string) error
 	RecordSend(ctx context.Context, phone string) error
 }
 
+// OTPSender delivers a code to a phone number.
 type OTPSender interface {
 	Send(ctx context.Context, phone, code string, ttl time.Duration) error
 }
 
+// OTPService sends and verifies one-time codes.
+// Codes are stored only as HMAC-SHA256 hashes.
 type OTPService struct {
 	sender      OTPSender
 	fallback    OTPSender
@@ -47,20 +54,24 @@ type OTPService struct {
 	maxAttempts int
 }
 
+// Option configures an OTPService.
 type Option func(*OTPService)
 
+// WithTTL sets the code lifetime. Default is 150 seconds.
 func WithTTL(d time.Duration) Option {
 	return func(src *OTPService) {
 		src.ttl = d
 	}
 }
 
+// WithOTPLength sets the number of digits in a code. Default is 6.
 func WithOTPLength(l int) Option {
 	return func(src *OTPService) {
 		src.otpLength = l
 	}
 }
 
+// WithMaxAttempts sets the allowed verification attempts per code. Default is 3.
 func WithMaxAttempts(a int) Option {
 	return func(src *OTPService) {
 		src.maxAttempts = a
@@ -73,6 +84,9 @@ const (
 	defaultMaxAttempts     = 3
 )
 
+// NewOTPService returns an OTPService. Codes go through sender first and
+// through fallback if sender returns domain.ErrPhoneNotReachable or
+// domain.ErrSenderUnavailable. secretKey is the HMAC key for code hashes.
 func NewOTPService(
 	sender OTPSender,
 	fallback OTPSender,
@@ -116,6 +130,9 @@ func signHash(message, key []byte) []byte {
 	return hash
 }
 
+// Send generates a code and delivers it to phone.
+// It returns domain.ErrMessageAlreadySent if an active code exists,
+// or a *domain.FloodWaitError if the send rate limit is hit.
 func (s *OTPService) Send(ctx context.Context, phone string) error {
 	exists, err := s.store.Exists(ctx, phone)
 	if err != nil {
@@ -150,6 +167,9 @@ func (s *OTPService) verifyCodeHash(code string, hash []byte) bool {
 	return hmac.Equal(hash, expected)
 }
 
+// Verify checks code against the stored hash and consumes it on success.
+// After the maximum number of attempts it discards the code and returns
+// domain.ErrMaxAttemptsExceeded.
 func (s *OTPService) Verify(ctx context.Context, phone, code string) error {
 	codeHash, err := s.store.Get(ctx, phone)
 	if err != nil {
