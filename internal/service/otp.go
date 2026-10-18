@@ -26,6 +26,11 @@ type AttemptsLimiter interface {
 	Release(ctx context.Context, phone string) error
 }
 
+type RateLimiter interface {
+	CanSend(ctx context.Context, phone string) error
+	RecordSend(ctx context.Context, phone string) error
+}
+
 type OTPSender interface {
 	Send(ctx context.Context, phone, code string, ttl time.Duration) error
 }
@@ -35,6 +40,7 @@ type OTPService struct {
 	fallback    OTPSender
 	store       CodeHashStore
 	limiter     AttemptsLimiter
+	rateLimiter RateLimiter
 	secretKey   []byte
 	ttl         time.Duration
 	otpLength   int
@@ -72,6 +78,7 @@ func NewOTPService(
 	fallback OTPSender,
 	store CodeHashStore,
 	limiter AttemptsLimiter,
+	rateLimiter RateLimiter,
 	secretKey []byte,
 	ops ...Option,
 ) *OTPService {
@@ -81,6 +88,7 @@ func NewOTPService(
 		fallback:    fallback,
 		store:       store,
 		limiter:     limiter,
+		rateLimiter: rateLimiter,
 		ttl:         defaultTTL,
 		otpLength:   defaultOTPLength,
 		maxAttempts: defaultMaxAttempts,
@@ -116,6 +124,9 @@ func (s *OTPService) Send(ctx context.Context, phone string) error {
 	if exists {
 		return domain.ErrMessageAlreadySent
 	}
+	if err := s.rateLimiter.CanSend(ctx, phone); err != nil {
+		return err
+	}
 	code, err := generateOTP(s.otpLength)
 	if err != nil {
 		return err
@@ -130,6 +141,7 @@ func (s *OTPService) Send(ctx context.Context, phone string) error {
 			return err
 		}
 	}
+	_ = s.rateLimiter.RecordSend(ctx, phone)
 	return s.store.Set(ctx, phone, signHash([]byte(*code), s.secretKey), s.ttl)
 }
 
@@ -154,7 +166,7 @@ func (s *OTPService) Verify(ctx context.Context, phone, code string) error {
 	if err != nil {
 		return err
 	}
-	if attempts >= s.maxAttempts {
+	if attempts > s.maxAttempts {
 		s.store.Delete(ctx, phone)
 		s.limiter.Release(ctx, phone)
 		return domain.ErrMaxAttemptsExceeded
@@ -162,5 +174,9 @@ func (s *OTPService) Verify(ctx context.Context, phone, code string) error {
 	if !s.verifyCodeHash(code, codeHash) {
 		return domain.ErrInvalidCode
 	}
-	return s.store.Delete(ctx, phone)
+	return func() error {
+		err = s.store.Delete(ctx, phone)
+		err = s.limiter.Release(ctx, phone)
+		return nil
+	}()
 }

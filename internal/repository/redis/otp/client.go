@@ -11,13 +11,32 @@ import (
 )
 
 type Store struct {
-	rdb *redis.Client
+	rdb               *redis.Client
+	maxHourlyAttempts int
 }
 
-func NewStore(rdb *redis.Client) *Store {
-	return &Store{
-		rdb: rdb,
+type Option func(*Store)
+
+func WithMaxHourlyAttempts(a int) Option {
+	return func(s *Store) {
+		s.maxHourlyAttempts = a
 	}
+}
+
+const defaultMaxHourlyAttempts = 4
+
+func NewStore(
+	rdb *redis.Client,
+	ops ...Option,
+) *Store {
+	store := &Store{
+		rdb:               rdb,
+		maxHourlyAttempts: defaultMaxHourlyAttempts,
+	}
+	for _, op := range ops {
+		op(store)
+	}
+	return store
 }
 
 func codeHashKey(phone string) string {
@@ -91,6 +110,55 @@ func (s *Store) Increment(ctx context.Context, phone string, ttl time.Duration) 
 func (s *Store) Release(ctx context.Context, phone string) error {
 	if err := s.rdb.Del(ctx, codeAttemptsKey(phone)).Err(); err != nil {
 		return fmt.Errorf("release attempts: %w", err)
+	}
+	return nil
+}
+
+func cooldownKey(phone string) string {
+	return "otp:cooldown:" + phone
+}
+
+func hourlyCooldownKey(phone string) string {
+	return "otp:hourly:" + phone
+}
+
+func (s *Store) CanSend(ctx context.Context, phone string) error {
+	attempts, err := s.rdb.Get(ctx, hourlyCooldownKey(phone)).Int()
+	if err != nil {
+		if !errors.Is(err, redis.Nil) {
+			return fmt.Errorf("can send: %w", err)
+		}
+	}
+	if attempts > s.maxHourlyAttempts {
+		if ttl, err := s.rdb.TTL(ctx, hourlyCooldownKey(phone)).Result(); err != nil {
+			return &domain.FloodWaitError{}
+		} else {
+			return &domain.FloodWaitError{
+				WaitTime: ttl,
+			}
+		}
+	}
+	ttl, err := s.rdb.TTL(ctx, cooldownKey(phone)).Result()
+	if err != nil {
+		return fmt.Errorf("can send: %w", err)
+	}
+	if ttl > 0 {
+		return &domain.FloodWaitError{
+			WaitTime: ttl,
+		}
+	}
+	return nil
+}
+func (s *Store) RecordSend(ctx context.Context, phone string) error {
+	tx := s.rdb.TxPipeline()
+	cmd := tx.SetNX(ctx, cooldownKey(phone), "", time.Minute)
+	tx.Incr(ctx, hourlyCooldownKey(phone))
+	tx.ExpireNX(ctx, hourlyCooldownKey(phone), time.Hour)
+	if _, err := tx.Exec(ctx); err != nil {
+		return fmt.Errorf("record send: %w", err)
+	}
+	if !cmd.Val() {
+		return domain.ErrOTPNotFound
 	}
 	return nil
 }

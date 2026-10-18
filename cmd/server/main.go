@@ -38,7 +38,7 @@ func main() {
 		Password: config.RedisPassword,
 	})
 	redisStore := redis_otp.NewStore(rdb)
-	otpService := service.NewOTPService(telegramSender, smsSender, redisStore, redisStore, []byte(config.SecretKey))
+	otpService := service.NewOTPService(telegramSender, smsSender, redisStore, redisStore, redisStore, []byte(config.SecretKey))
 	otpHandler := handler.NewOTPHandler(otpService)
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/send-code", otpHandler.Send)
