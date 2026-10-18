@@ -12,12 +12,52 @@ let currentPhone = '';
 let countdownTimer = null;
 let currentLang = 'ru';
 
-// Timer state is stored (not just rendered) so it can be re-translated on language switch.
-let timerState = 'idle'; // 'idle' | 'running' | 'expired'
+// Verification timer state ('idle' | 'running' | 'expired')
+let timerState = 'idle';
 let timerRemaining = 0;
 
-// Alert is stored as a render function so it can be re-translated on language switch.
+// Flood wait live timer state
+let floodTimer = null;
+let floodRemaining = 0;
+
+// Alert state stored as a render function so it updates on language changes
 let alertState = null; // { render: () => string, type: string }
+
+// Storage for active OTP countdowns per phone number
+const SESSIONS_STORAGE_KEY = 'otp_active_sessions';
+
+function getSessionExpiresAt(phone) {
+  if (!phone) return 0;
+  try {
+    const raw = sessionStorage.getItem(SESSIONS_STORAGE_KEY);
+    if (!raw) return 0;
+    const map = JSON.parse(raw);
+    return typeof map[phone] === 'number' ? map[phone] : 0;
+  } catch (_) {
+    return 0;
+  }
+}
+
+function setSessionExpiresAt(phone, expiresAt) {
+  if (!phone) return;
+  try {
+    const raw = sessionStorage.getItem(SESSIONS_STORAGE_KEY);
+    const map = raw ? JSON.parse(raw) : {};
+    map[phone] = expiresAt;
+    sessionStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(map));
+  } catch (_) {}
+}
+
+function removeSession(phone) {
+  if (!phone) return;
+  try {
+    const raw = sessionStorage.getItem(SESSIONS_STORAGE_KEY);
+    if (!raw) return;
+    const map = JSON.parse(raw);
+    delete map[phone];
+    sessionStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(map));
+  } catch (_) {}
+}
 
 const I18N = {
   ru: {
@@ -50,6 +90,10 @@ const I18N = {
     err_code_expired: 'Срок действия кода истёк. Запросите новый.',
     err_max_attempts: 'Превышено число попыток. Запросите новый код.',
     err_rate_limit: 'Слишком много запросов.',
+    err_flood_wait: 'Слишком много запросов (Flood Wait).',
+    flood_wait_active: 'Слишком много запросов. Повторная отправка доступна через {n} сек.',
+    flood_wait_expired: 'Время ожидания истекло. Вы можете запросить код снова.',
+    flood_btn_wait: 'Подождите ({n}с)...',
     err_already_sent: 'Код уже отправлен на этот номер. Введите его или дождитесь окончания срока действия.',
     err_otp_not_found: 'Код не найден или срок его действия истёк. Запросите новый.',
     err_not_reachable: 'Не удалось доставить код на этот номер.',
@@ -86,6 +130,10 @@ const I18N = {
     err_code_expired: 'The code has expired. Request a new one.',
     err_max_attempts: 'Too many attempts. Request a new code.',
     err_rate_limit: 'Too many requests.',
+    err_flood_wait: 'Too many requests (Flood Wait).',
+    flood_wait_active: 'Too many requests. Resend available in {n}s.',
+    flood_wait_expired: 'Wait time expired. You can request a code again.',
+    flood_btn_wait: 'Wait ({n}s)...',
     err_already_sent: 'A code was already sent to this number. Enter it or wait until it expires.',
     err_otp_not_found: 'Code not found or expired. Request a new one.',
     err_not_reachable: 'Could not deliver the code to this number.',
@@ -122,6 +170,10 @@ const I18N = {
     err_code_expired: 'Kodning amal qilish muddati tugagan. Yangi kod soʻrang.',
     err_max_attempts: 'Urinishlar soni oshib ketdi. Yangi kod soʻrang.',
     err_rate_limit: 'Soʻrovlar juda koʻp.',
+    err_flood_wait: 'Soʻrovlar juda koʻp (Flood Wait).',
+    flood_wait_active: 'Soʻrovlar juda koʻp. Qayta yuborish {n} soniyadan keyin mumkin.',
+    flood_wait_expired: 'Kutish vaqti tugadi. Endi qayta kod soʻrashingiz mumkin.',
+    flood_btn_wait: 'Kuting ({n}s)...',
     err_already_sent: 'Bu raqamga kod allaqachon yuborilgan. Uni kiriting yoki amal qilish muddati tugashini kuting.',
     err_otp_not_found: 'Kod topilmadi yoki muddati tugagan. Yangi kod soʻrang.',
     err_not_reachable: 'Kodni bu raqamga yetkazib boʻlmadi.',
@@ -138,6 +190,7 @@ const ERROR_KEYS = {
   CODE_EXPIRED: 'err_code_expired',
   MAX_ATTEMPTS_EXCEEDED: 'err_max_attempts',
   TOO_MANY_REQUESTS: 'err_rate_limit',
+  FLOOD_WAIT: 'err_flood_wait',
   MESSAGE_ALREADY_SENT: 'err_already_sent',
   OTP_NOT_FOUND: 'err_otp_not_found',
   PHONE_NOT_REACHABLE: 'err_not_reachable',
@@ -145,14 +198,14 @@ const ERROR_KEYS = {
   INTERNAL_ERROR: 'err_internal'
 };
 
-// Errors after which the current OTP session is over.
+// Errors after which the current OTP session is considered expired/cancelled
 const SESSION_ENDED = ['MAX_ATTEMPTS_EXCEEDED', 'OTP_NOT_FOUND', 'CODE_EXPIRED'];
 
 function t(key) {
-  return I18N[currentLang][key];
+  return (I18N[currentLang] && I18N[currentLang][key]) || (I18N.ru && I18N.ru[key]) || key;
 }
 
-// ---- Theme: saved choice, otherwise the system preference ----
+// ---- Theme: saved choice, otherwise system preference ----
 const THEME_KEY = 'theme';
 const systemDark = window.matchMedia('(prefers-color-scheme: dark)');
 
@@ -177,7 +230,7 @@ function toggleTheme() {
   try { localStorage.setItem(THEME_KEY, next); } catch (_) {}
 }
 
-// ---- Language: saved choice, otherwise the browser language, otherwise Russian ----
+// ---- Language management ----
 function detectLang() {
   try {
     const saved = localStorage.getItem(LANG_KEY);
@@ -202,21 +255,34 @@ function applyLanguage(lang) {
   });
 
   const langSwitch = document.getElementById('lang-switch');
-  langSwitch.style.setProperty('--i', LANGS.indexOf(lang));
-  langSwitch.setAttribute('aria-label', t('lang_title'));
-  langSwitch.querySelectorAll('.lang-opt').forEach((opt) => {
-    const active = opt.dataset.lang === lang;
-    opt.setAttribute('aria-checked', String(active));
-    opt.tabIndex = active ? 0 : -1; // roving tabindex: one tab stop for the whole group
-  });
+  if (langSwitch) {
+    langSwitch.style.setProperty('--i', LANGS.indexOf(lang));
+    langSwitch.setAttribute('aria-label', t('lang_title'));
+    langSwitch.querySelectorAll('.lang-opt').forEach((opt) => {
+      const active = opt.dataset.lang === lang;
+      opt.setAttribute('aria-checked', String(active));
+      opt.tabIndex = active ? 0 : -1;
+    });
+  }
 
   const themeBtn = document.getElementById('theme-btn');
-  themeBtn.title = t('theme_title');
-  themeBtn.setAttribute('aria-label', t('theme_title'));
+  if (themeBtn) {
+    themeBtn.title = t('theme_title');
+    themeBtn.setAttribute('aria-label', t('theme_title'));
+  }
 
   if (!document.getElementById('step-verify').classList.contains('hidden')) {
     updateVerifySubtitle();
   }
+
+  // Update live flood wait UI button text if countdown is running
+  if (floodRemaining > 0) {
+    const sendBtn = document.getElementById('send-btn');
+    if (sendBtn) {
+      sendBtn.textContent = t('flood_btn_wait').replace('{n}', floodRemaining);
+    }
+  }
+
   paintAlert();
   paintTimer();
 }
@@ -227,9 +293,9 @@ function setLanguage(lang) {
   try { localStorage.setItem(LANG_KEY, lang); } catch (_) {}
 }
 
-// One click to any language; arrow keys / Home / End move between options (radio-group pattern).
 function initLanguageSwitch() {
   const sw = document.getElementById('lang-switch');
+  if (!sw) return;
 
   sw.addEventListener('click', (e) => {
     const opt = e.target.closest('.lang-opt');
@@ -249,15 +315,12 @@ function initLanguageSwitch() {
     sw.querySelector('[data-lang="' + next + '"]').focus();
   });
 
-  // Enable the thumb animation only after the initial position is set, so it does not slide on page load.
   requestAnimationFrame(() => sw.classList.add('ready'));
 }
 
-// ---- Phone: formatting and validation ----
-// Uses libphonenumber-js when /static/libphonenumber-min.js is loaded,
-// otherwise falls back to a simple formatter and an E.164 regex.
+// ---- Phone formatting and validation ----
 function formatPhone(raw) {
-  const digits = raw.replace(/\D/g, '').slice(0, 15); // E.164: up to 15 digits
+  const digits = raw.replace(/\D/g, '').slice(0, 15);
   if (!digits) return '';
 
   const lib = window.libphonenumber;
@@ -275,7 +338,6 @@ function formatPhone(raw) {
   return '+' + parts.join(' ');
 }
 
-// Returns the number in E.164 format or null if it is invalid.
 function normalizePhone(raw) {
   const lib = window.libphonenumber;
   if (lib) {
@@ -286,12 +348,12 @@ function normalizePhone(raw) {
   return /^\+[1-9]\d{6,14}$/.test(e164) ? e164 : null;
 }
 
-// ---- Alerts ----
-// `render` is a function returning the message, so the text follows the current language.
+// ---- Alert Box ----
 function paintAlert() {
   const box = document.getElementById('alert-box');
   if (!alertState) {
     box.style.display = 'none';
+    box.textContent = '';
     return;
   }
   box.textContent = alertState.render();
@@ -309,7 +371,75 @@ function hideAlert() {
   paintAlert();
 }
 
-// ---- Network ----
+// ---- Live Flood Wait Countdown Timer ----
+function extractRetrySeconds(res, data) {
+  if (data && typeof data.retry_after === 'number' && data.retry_after > 0) {
+    return data.retry_after;
+  }
+  const headerVal = res && res.headers ? parseInt(res.headers.get('Retry-After'), 10) : NaN;
+  if (!isNaN(headerVal) && headerVal > 0) {
+    return headerVal;
+  }
+  if (data && typeof data.message === 'string') {
+    const m = data.message.match(/retry after (?:(\d+)m)?(?:(\d+)s)?/i);
+    if (m) {
+      const mins = parseInt(m[1] || '0', 10);
+      const secs = parseInt(m[2] || '0', 10);
+      const total = mins * 60 + secs;
+      if (total > 0) return total;
+    }
+    const digits = data.message.match(/(\d+)\s*(?:s|sec|сек|soniya)/i);
+    if (digits) {
+      const val = parseInt(digits[1], 10);
+      if (val > 0) return val;
+    }
+  }
+  return 60; // fallback standard cooldown
+}
+
+function startFloodCountdown(seconds) {
+  stopFloodCountdown(false);
+  floodRemaining = seconds;
+
+  const sendBtn = document.getElementById('send-btn');
+  if (sendBtn) {
+    sendBtn.disabled = true;
+    sendBtn.textContent = t('flood_btn_wait').replace('{n}', floodRemaining);
+  }
+
+  showAlert(() => t('flood_wait_active').replace('{n}', floodRemaining), 'warning');
+
+  floodTimer = setInterval(() => {
+    floodRemaining--;
+    if (floodRemaining <= 0) {
+      stopFloodCountdown(true);
+      showAlert(() => t('flood_wait_expired'), 'info');
+      return;
+    }
+
+    if (sendBtn) {
+      sendBtn.textContent = t('flood_btn_wait').replace('{n}', floodRemaining);
+    }
+    paintAlert();
+  }, 1000);
+}
+
+function stopFloodCountdown(resetButton = true) {
+  if (floodTimer) {
+    clearInterval(floodTimer);
+    floodTimer = null;
+  }
+  floodRemaining = 0;
+  if (resetButton) {
+    const sendBtn = document.getElementById('send-btn');
+    if (sendBtn) {
+      sendBtn.disabled = false;
+      sendBtn.textContent = t('send_btn');
+    }
+  }
+}
+
+// ---- Network Helpers ----
 async function postJSON(url, payload) {
   const res = await fetch(url, {
     method: 'POST',
@@ -321,24 +451,27 @@ async function postJSON(url, payload) {
   return { res, data };
 }
 
-// Returns a render function: the message is built from the current language on every call.
 function errorMessage(res, data) {
-  const key = ERROR_KEYS[data.code];
-  const isRateLimited = res.status === 429;
-  const retryAfter = isRateLimited ? parseInt(res.headers.get('Retry-After'), 10) : NaN;
+  const key = data && data.code ? ERROR_KEYS[data.code] : null;
 
   return () => {
-    let msg = key ? t(key) : t('err_generic');
-    if (isRateLimited) {
-      msg += ' ' + (retryAfter > 0 ? t('retry_in').replace('{n}', retryAfter) : t('try_later'));
+    if (key) return t(key);
+    if (data && typeof data.message === 'string' && data.message.trim()) {
+      return data.message;
     }
-    return msg;
+    return t('err_generic');
   };
 }
 
-// ---- Flow ----
+// ---- User Flow ----
 async function handleSendOTP(e) {
   e.preventDefault();
+
+  if (floodRemaining > 0) {
+    showAlert(() => t('flood_wait_active').replace('{n}', floodRemaining), 'warning');
+    return;
+  }
+
   hideAlert();
 
   const phone = normalizePhone(document.getElementById('phone-input').value);
@@ -357,8 +490,11 @@ async function handleSendOTP(e) {
 
     if (res.ok) {
       renderVerifyStep(true);
+    } else if (data.code === 'FLOOD_WAIT' || res.status === 429) {
+      const waitSeconds = extractRetrySeconds(res, data);
+      startFloodCountdown(waitSeconds);
     } else if (data.code === 'MESSAGE_ALREADY_SENT') {
-      // A code for this phone is still valid: let the user enter it.
+      // Code is already issued and active: continue existing countdown!
       renderVerifyStep(false);
       showAlert(errorMessage(res, data), 'info');
     } else {
@@ -367,16 +503,22 @@ async function handleSendOTP(e) {
   } catch (err) {
     showAlert(() => t('err_generic'));
   } finally {
-    btn.disabled = false;
-    btn.textContent = t('send_btn');
+    // Keep button disabled if flood wait countdown is active
+    if (floodRemaining <= 0) {
+      btn.disabled = false;
+      btn.textContent = t('send_btn');
+    }
   }
 }
 
 function updateVerifySubtitle() {
-  document.getElementById('verify-subtitle').textContent = t('step2_SentTo') + formatPhone(currentPhone);
+  const el = document.getElementById('verify-subtitle');
+  if (el) {
+    el.textContent = t('step2_SentTo') + formatPhone(currentPhone);
+  }
 }
 
-function renderVerifyStep(startTimer) {
+function renderVerifyStep(isNewCode = false) {
   document.getElementById('step-phone').classList.add('hidden');
   document.getElementById('step-success').classList.add('hidden');
   document.getElementById('step-verify').classList.remove('hidden');
@@ -387,18 +529,22 @@ function renderVerifyStep(startTimer) {
   codeInput.value = '';
   codeInput.focus();
 
-  if (startTimer) {
-    startCountdown(CODE_TTL_SECONDS);
-  } else {
-    stopCountdown();
-  }
+  startCountdownForPhone(currentPhone, isNewCode);
 }
 
 async function handleVerifyOTP(e) {
   e.preventDefault();
   hideAlert();
 
-  const code = document.getElementById('code-input').value.trim();
+  const codeInput = document.getElementById('code-input');
+  const code = codeInput.value.replace(/\D/g, '').trim();
+
+  if (code.length === 0) {
+    showAlert(() => t('err_invalid_code'));
+    codeInput.focus();
+    return;
+  }
+
   const btn = document.getElementById('verify-btn');
   btn.disabled = true;
   btn.textContent = t('verifying_btn');
@@ -407,21 +553,28 @@ async function handleVerifyOTP(e) {
     const { res, data } = await postJSON(API.verify, { phone: currentPhone, code });
 
     if (res.ok) {
+      removeSession(currentPhone);
       stopCountdown();
       document.getElementById('step-verify').classList.add('hidden');
       document.getElementById('step-success').classList.remove('hidden');
       return;
     }
 
+    if (data.code === 'FLOOD_WAIT' || res.status === 429) {
+      const waitSeconds = extractRetrySeconds(res, data);
+      startFloodCountdown(waitSeconds);
+    }
+
     const msg = errorMessage(res, data);
     if (SESSION_ENDED.includes(data.code)) {
+      removeSession(currentPhone);
       resetToPhone();
       showAlert(msg);
       return;
     }
 
     showAlert(msg);
-    document.getElementById('code-input').select();
+    codeInput.select();
   } catch (err) {
     showAlert(() => t('err_generic'));
   } finally {
@@ -432,15 +585,43 @@ async function handleVerifyOTP(e) {
 
 function resetToPhone() {
   hideAlert();
-  stopCountdown();
+  // Clear the interval tick, but preserve session expiration timestamp in storage
+  if (countdownTimer) {
+    clearInterval(countdownTimer);
+    countdownTimer = null;
+  }
+  timerState = 'idle';
+
   document.getElementById('step-verify').classList.add('hidden');
   document.getElementById('step-success').classList.add('hidden');
   document.getElementById('step-phone').classList.remove('hidden');
+
+  const phoneInput = document.getElementById('phone-input');
+  if (phoneInput) {
+    phoneInput.focus();
+  }
 }
 
-// ---- Countdown ----
+function handleTestAgain() {
+  removeSession(currentPhone);
+  currentPhone = '';
+  const phoneInput = document.getElementById('phone-input');
+  if (phoneInput) {
+    phoneInput.value = '';
+  }
+  const codeInput = document.getElementById('code-input');
+  if (codeInput) {
+    codeInput.value = '';
+  }
+  stopFloodCountdown(true);
+  resetToPhone();
+}
+
+// ---- Verification Countdown ----
 function paintTimer() {
   const label = document.getElementById('timer-label');
+  if (!label) return;
+
   if (timerState === 'running') {
     label.textContent = t('timer_prefix') + timerRemaining + t('timer_suffix');
   } else if (timerState === 'expired') {
@@ -451,52 +632,92 @@ function paintTimer() {
 }
 
 function stopCountdown() {
-  if (countdownTimer) clearInterval(countdownTimer);
-  countdownTimer = null;
+  if (countdownTimer) {
+    clearInterval(countdownTimer);
+    countdownTimer = null;
+  }
   timerState = 'idle';
+  timerRemaining = 0;
   paintTimer();
 }
 
-function startCountdown(seconds) {
-  stopCountdown();
-  timerRemaining = seconds;
-  timerState = 'running';
+function startCountdownForPhone(phone, isNewCode = false) {
+  let expiresAt = getSessionExpiresAt(phone);
+  const now = Date.now();
+
+  if (isNewCode || !expiresAt || expiresAt <= now) {
+    expiresAt = now + CODE_TTL_SECONDS * 1000;
+    setSessionExpiresAt(phone, expiresAt);
+  }
+
+  runCountdown(expiresAt);
+}
+
+function runCountdown(expiresAt) {
+  if (countdownTimer) {
+    clearInterval(countdownTimer);
+    countdownTimer = null;
+  }
 
   const tick = () => {
+    const remainingMs = expiresAt - Date.now();
+    timerRemaining = Math.max(0, Math.ceil(remainingMs / 1000));
+
     if (timerRemaining <= 0) {
-      clearInterval(countdownTimer);
-      countdownTimer = null;
+      if (countdownTimer) {
+        clearInterval(countdownTimer);
+        countdownTimer = null;
+      }
       timerState = 'expired';
+      removeSession(currentPhone);
       paintTimer();
       return;
     }
+
+    timerState = 'running';
     paintTimer();
-    timerRemaining--;
   };
+
   tick();
   countdownTimer = setInterval(tick, 1000);
 }
 
+// ---- Initialization ----
 document.addEventListener('DOMContentLoaded', () => {
   applyTheme(savedTheme() || (systemDark.matches ? 'dark' : 'light'));
-  // Follow the system theme until the user picks one manually.
-  systemDark.addEventListener('change', (e) => {
-    if (!savedTheme()) applyTheme(e.matches ? 'dark' : 'light');
+  systemDark.addEventListener('change', () => {
+    if (!savedTheme()) applyTheme(systemDark.matches ? 'dark' : 'light');
   });
 
   applyLanguage(detectLang());
   initLanguageSwitch();
 
   const phoneInput = document.getElementById('phone-input');
-  phoneInput.addEventListener('input', (e) => {
-    // Do not reformat while editing in the middle, so the caret does not jump.
-    if (e.target.selectionStart !== e.target.value.length) return;
-    e.target.value = formatPhone(e.target.value);
-  });
+  if (phoneInput) {
+    phoneInput.addEventListener('input', (e) => {
+      if (e.target.selectionStart !== e.target.value.length) return;
+      e.target.value = formatPhone(e.target.value);
+    });
+  }
+
+  const codeInput = document.getElementById('code-input');
+  if (codeInput) {
+    codeInput.addEventListener('input', (e) => {
+      const clean = e.target.value.replace(/\D/g, '').slice(0, 6);
+      e.target.value = clean;
+      // Auto-submit verification once all 6 digits are typed
+      if (clean.length === 6) {
+        const formVerify = document.getElementById('form-verify');
+        if (formVerify && typeof formVerify.requestSubmit === 'function') {
+          formVerify.requestSubmit();
+        }
+      }
+    });
+  }
 
   document.getElementById('form-send').addEventListener('submit', handleSendOTP);
   document.getElementById('form-verify').addEventListener('submit', handleVerifyOTP);
   document.getElementById('change-phone-btn').addEventListener('click', resetToPhone);
-  document.getElementById('test-again-btn').addEventListener('click', resetToPhone);
+  document.getElementById('test-again-btn').addEventListener('click', handleTestAgain);
   document.getElementById('theme-btn').addEventListener('click', toggleTheme);
 });

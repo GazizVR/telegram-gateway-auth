@@ -19,8 +19,10 @@ func (c *Client) SendSMS(ctx context.Context, phone, message string) (string, er
 		return "", err
 	}
 
+	cleanPhone := strings.TrimPrefix(phone, "+")
+
 	form := url.Values{}
-	form.Set("mobile_phone", phone)
+	form.Set("mobile_phone", cleanPhone)
 	form.Set("message", message)
 	form.Set("from", c.from)
 

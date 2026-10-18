@@ -11,10 +11,12 @@ import (
 func handleError(w http.ResponseWriter, err error) {
 	var floodErr *domain.FloodWaitError
 	if errors.As(err, &floodErr) {
+		seconds := 0
 		if floodErr.WaitTime > 0 {
-			w.Header().Set("Retry-After", strconv.Itoa(int(floodErr.WaitTime.Seconds())))
+			seconds = int(floodErr.WaitTime.Seconds())
+			w.Header().Set("Retry-After", strconv.Itoa(seconds))
 		}
-		writeError(w, http.StatusTooManyRequests, "TOO_MANY_REQUESTS", floodErr.Error())
+		writeErrorWithRetry(w, http.StatusTooManyRequests, "FLOOD_WAIT", floodErr.Error(), seconds)
 		return
 	}
 

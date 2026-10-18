@@ -297,6 +297,16 @@ h1 {
   color: var(--tg-blue);
 }
 
+.alert-box.warning {
+  background: rgba(245, 158, 11, 0.12);
+  color: #D97706;
+}
+
+[data-theme="dark"] .alert-box.warning {
+  background: rgba(245, 158, 11, 0.2);
+  color: #FBBF24;
+}
+
 .hidden {
   display: none !important;
 }

@@ -19,8 +19,9 @@ func writeJSON(
 }
 
 type errorResponse struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
+	Code       string `json:"code"`
+	Message    string `json:"message"`
+	RetryAfter int    `json:"retry_after,omitempty"`
 }
 
 func writeError(
@@ -29,4 +30,13 @@ func writeError(
 	code, msg string,
 ) {
 	writeJSON(w, status, errorResponse{Code: code, Message: msg})
+}
+
+func writeErrorWithRetry(
+	w http.ResponseWriter,
+	status int,
+	code, msg string,
+	retryAfter int,
+) {
+	writeJSON(w, status, errorResponse{Code: code, Message: msg, RetryAfter: retryAfter})
 }
