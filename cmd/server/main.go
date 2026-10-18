@@ -31,8 +31,7 @@ func main() {
 		slog.Warn("ESKIZ_EMAIL or ESKIZ_PASSWORD is not set, SMS fallback is disabled")
 		smsSender = adapter.NewSMSSender()
 	} else {
-		eskiz := eskiz.New(config.EskizEmail, config.EskizPassword)
-		smsSender = adapter.NewEskizSender(eskiz)
+		smsSender = eskiz.New(config.EskizEmail, config.EskizPassword)
 	}
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     config.RedisAddr,
