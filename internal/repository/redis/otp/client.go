@@ -49,11 +49,11 @@ func (s *Store) Set(
 	codeHash []byte,
 	ttl time.Duration,
 ) error {
-	exists, err := s.rdb.SetNX(ctx, codeHashKey(phone), codeHash, ttl).Result()
+	ok, err := s.rdb.SetNX(ctx, codeHashKey(phone), codeHash, ttl).Result()
 	if err != nil {
 		return fmt.Errorf("set code hash: %w", err)
 	}
-	if exists {
+	if !ok {
 		return domain.ErrMessageAlreadySent
 	}
 	return nil
