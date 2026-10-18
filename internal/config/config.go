@@ -12,6 +12,8 @@ type Config struct {
 	HTTPAddr      string
 	RedisAddr     string
 	RedisPassword string
+	EskizEmail    string
+	EskizPassword string
 }
 
 var (
@@ -38,12 +40,13 @@ func Load() (*Config, error) {
 	if redisAddr == "" {
 		return nil, fmt.Errorf("REDIS_ADDR: %w", ErrMissingRedisAddr)
 	}
-	redisPassword := os.Getenv("REDIS_PASSWORD")
 	return &Config{
 		Token:         token,
 		SecretKey:     secretKey,
 		HTTPAddr:      httpAddr,
 		RedisAddr:     redisAddr,
-		RedisPassword: redisPassword,
+		RedisPassword: os.Getenv("REDIS_PASSWORD"),
+		EskizEmail:    os.Getenv("ESKIZ_EMAIL"),
+		EskizPassword: os.Getenv("ESKIZ_PASSWORD"),
 	}, nil
 }

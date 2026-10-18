@@ -2,10 +2,12 @@ package main
 
 import (
 	"log"
+	"log/slog"
 	"net/http"
 
 	telegramgateway "github.com/gazizvr/go-telegram-gateway"
 	"github.com/gazizvr/telegram-gateway-auth/internal/adapter"
+	"github.com/gazizvr/telegram-gateway-auth/internal/client/eskiz"
 	"github.com/gazizvr/telegram-gateway-auth/internal/config"
 	"github.com/gazizvr/telegram-gateway-auth/internal/handler"
 	redis_otp "github.com/gazizvr/telegram-gateway-auth/internal/repository/redis/otp"
@@ -24,7 +26,14 @@ func main() {
 		log.Fatalln(err)
 	}
 	telegramSender := adapter.NewTelegramSender(gateway)
-	smsSender := adapter.NewSMSSender()
+	var smsSender service.OTPSender
+	if config.EskizEmail == "" || config.EskizPassword == "" {
+		slog.Warn("ESKIZ_EMAIL or ESKIZ_PASSWORD is not set, SMS fallback is disabled")
+		smsSender = adapter.NewSMSSender()
+	} else {
+		eskiz := eskiz.New(config.EskizEmail, config.EskizPassword)
+		smsSender = adapter.NewEskizSender(eskiz)
+	}
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     config.RedisAddr,
 		Password: config.RedisPassword,

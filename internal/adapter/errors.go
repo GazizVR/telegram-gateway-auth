@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	telegramgateway "github.com/gazizvr/go-telegram-gateway"
+	"github.com/gazizvr/telegram-gateway-auth/internal/client/eskiz"
 	"github.com/gazizvr/telegram-gateway-auth/internal/domain"
 )
 
@@ -39,5 +40,27 @@ func mapTelegramError(err error) error {
 		return domain.ErrSenderUnavailable
 	default:
 		return err
+	}
+}
+
+// mapEskizError translates eskiz client errors into domain errors
+// that the OTPService fallback logic understands.
+func mapEskizError(err error) error {
+	if err == nil {
+		return nil
+	}
+	switch {
+	// Auth / infrastructure problems — the SMS provider itself is down.
+	case errors.Is(err, eskiz.ErrUnauthorized),
+		errors.Is(err, eskiz.ErrEmptyToken),
+		errors.Is(err, eskiz.ErrServerError):
+		return domain.ErrSenderUnavailable
+
+	// The phone number was rejected by the API (wrong format, not a UZ number, etc.).
+	case errors.Is(err, eskiz.ErrBadRequest):
+		return domain.ErrPhoneNotReachable
+
+	default:
+		return domain.ErrSenderUnavailable
 	}
 }
