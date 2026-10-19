@@ -8,6 +8,7 @@ package main
 import (
 	"log"
 	"log/slog"
+	"net"
 	"net/http"
 
 	telegramgateway "github.com/gazizvr/go-telegram-gateway"
@@ -16,9 +17,12 @@ import (
 	"github.com/gazizvr/telegram-gateway-auth/internal/config"
 	"github.com/gazizvr/telegram-gateway-auth/internal/handler"
 	redis_otp "github.com/gazizvr/telegram-gateway-auth/internal/repository/redis/otp"
+	"github.com/gazizvr/telegram-gateway-auth/internal/server"
 	"github.com/gazizvr/telegram-gateway-auth/internal/service"
 	"github.com/gazizvr/telegram-gateway-auth/internal/web"
+	"github.com/gazizvr/telegram-gateway-auth/otpservice"
 	"github.com/redis/go-redis/v9"
+	"google.golang.org/grpc"
 )
 
 func main() {
@@ -44,6 +48,18 @@ func main() {
 	})
 	redisStore := redis_otp.NewStore(rdb)
 	otpService := service.NewOTPService(telegramSender, smsSender, redisStore, redisStore, redisStore, []byte(config.SecretKey))
+	go func() {
+		service := server.NewOTPServiceServer(otpService)
+		ln, err := net.Listen("tcp", ":1234")
+		if err != nil {
+			log.Fatal(err)
+		}
+		server := grpc.NewServer()
+		otpservice.RegisterOTPServiceServer(server, service)
+		if err := server.Serve(ln); err != nil {
+			log.Fatal(err)
+		}
+	}()
 	otpHandler := handler.NewOTPHandler(otpService)
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/send-code", otpHandler.Send)

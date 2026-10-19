@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+option go_package = "github.com/gazizvr/telegram-gateway-auth/otpservice";
+
+package otpservice;
+
+service OTPService {
+  rpc Send(SendRequest) returns (SendResponse) {};
+  rpc Verify(VerifyRequest) returns (VerifyResponse) {};
+}
+
+message SendRequest {
+  string phone = 1;
+}
+
+message SendResponse {}
+
+message VerifyRequest {
+  string phone = 1;
+  string code = 2;
+}
+
+message VerifyResponse {}
