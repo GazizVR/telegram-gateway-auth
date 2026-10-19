@@ -9,7 +9,7 @@ import (
 
 // Config holds the service settings read from the environment.
 //
-// Optional fields are RedisPassword, EskizEmail and EskizPassword.
+// Optional fields are WebDemo, RedisPassword, EskizEmail and EskizPassword.
 // SMS fallback is disabled when either Eskiz field is empty.
 type Config struct {
 	Token         string
@@ -19,6 +19,7 @@ type Config struct {
 	RedisPassword string
 	EskizEmail    string
 	EskizPassword string
+	WebDemo       bool
 }
 
 // Errors returned by Load for a missing required variable.
@@ -30,7 +31,7 @@ var (
 )
 
 // Load reads TOKEN, SECRET_KEY, HTTP_ADDR and REDIS_ADDR, which are required,
-// and REDIS_PASSWORD, ESKIZ_EMAIL and ESKIZ_PASSWORD, which are optional.
+// and WEB_DEMO, REDIS_PASSWORD, ESKIZ_EMAIL and ESKIZ_PASSWORD, which are optional.
 // The returned error wraps the matching ErrMissing* value.
 func Load() (*Config, error) {
 	token := os.Getenv("TOKEN")
@@ -49,6 +50,11 @@ func Load() (*Config, error) {
 	if redisAddr == "" {
 		return nil, fmt.Errorf("REDIS_ADDR: %w", ErrMissingRedisAddr)
 	}
+	var webDemo bool
+	envWebDemo := os.Getenv("WEB_DEMO")
+	if envWebDemo == "true" {
+		webDemo = true
+	}
 	return &Config{
 		Token:         token,
 		SecretKey:     secretKey,
@@ -57,5 +63,6 @@ func Load() (*Config, error) {
 		RedisPassword: os.Getenv("REDIS_PASSWORD"),
 		EskizEmail:    os.Getenv("ESKIZ_EMAIL"),
 		EskizPassword: os.Getenv("ESKIZ_PASSWORD"),
+		WebDemo:       webDemo,
 	}, nil
 }
