@@ -5,12 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 )
 
 // Config holds the service settings read from the environment.
 //
-// Required fields are TOKEN, SECRET_KEY, HTTP_ADDR and REDIS_ADDR.
+// Required fields are TOKEN, SECRET_KEY and REDIS_ADDR.
 // SMS fallback is disabled when either Eskiz field is empty.
 type Config struct {
 	Token         string
@@ -21,18 +20,17 @@ type Config struct {
 	EskizEmail    string
 	EskizPassword string
 	WebDemo       bool
-	GRPCAddr      *string
+	GRPCAddr      string
 }
 
 // Errors returned by Load for a missing required variable.
 var (
 	ErrMissingToken     = errors.New("required token is not set")
-	ErrMissingHTTPAddr  = errors.New("required http addr is not set")
 	ErrMissingRedisAddr = errors.New("required redis addr is not set")
 	ErrMissingSecretKey = errors.New("required secret key is not set")
 )
 
-// Load reads TOKEN, SECRET_KEY, HTTP_ADDR and REDIS_ADDR, which are required,
+// Load reads TOKEN, SECRET_KEY and REDIS_ADDR, which are required,
 // and others are optional.
 // The returned error wraps the matching ErrMissing* value.
 func Load() (*Config, error) {
@@ -44,10 +42,6 @@ func Load() (*Config, error) {
 	if secretKey == "" {
 		return nil, fmt.Errorf("SECRET_KEY: %w", ErrMissingSecretKey)
 	}
-	httpAddr := os.Getenv("HTTP_ADDR")
-	if httpAddr == "" {
-		return nil, fmt.Errorf("HTTP_ADDR: %w", ErrMissingHTTPAddr)
-	}
 	redisAddr := os.Getenv("REDIS_ADDR")
 	if redisAddr == "" {
 		return nil, fmt.Errorf("REDIS_ADDR: %w", ErrMissingRedisAddr)
@@ -57,20 +51,15 @@ func Load() (*Config, error) {
 	if envWebDemo == "true" {
 		webDemo = true
 	}
-	var grpcAddr *string = nil
-	envGRPCAddr := os.Getenv("GRPC_ADDR")
-	if len(strings.TrimSpace(envGRPCAddr)) > 0 {
-		grpcAddr = &envGRPCAddr
-	}
 	return &Config{
 		Token:         token,
 		SecretKey:     secretKey,
-		HTTPAddr:      httpAddr,
+		HTTPAddr:      os.Getenv("HTTP_ADDR"),
 		RedisAddr:     redisAddr,
 		RedisPassword: os.Getenv("REDIS_PASSWORD"),
 		EskizEmail:    os.Getenv("ESKIZ_EMAIL"),
 		EskizPassword: os.Getenv("ESKIZ_PASSWORD"),
 		WebDemo:       webDemo,
-		GRPCAddr:      grpcAddr,
+		GRPCAddr:      os.Getenv("GRPC_ADDR"),
 	}, nil
 }

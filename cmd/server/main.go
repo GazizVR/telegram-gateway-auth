@@ -28,11 +28,14 @@ import (
 func main() {
 	config, err := config.Load()
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatal(err)
+	}
+	if config.HTTPAddr == "" && config.GRPCAddr == "" {
+		log.Fatal("HTTP_ADDR and GRPC_ADDR are not set, service is shutting down")
 	}
 	gateway, err := telegramgateway.NewClient(config.Token)
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatal(err)
 	}
 	telegramSender := adapter.NewTelegramSender(gateway)
 	var smsSender service.OTPSender
@@ -48,10 +51,10 @@ func main() {
 	})
 	redisStore := redis_otp.NewStore(rdb)
 	otpService := service.NewOTPService(telegramSender, smsSender, redisStore, redisStore, redisStore, []byte(config.SecretKey))
-	if config.GRPCAddr != nil {
+	if len(config.GRPCAddr) > 0 {
 		go func() {
 			service := server.NewOTPServiceServer(otpService)
-			ln, err := net.Listen("tcp", *config.GRPCAddr)
+			ln, err := net.Listen("tcp", config.GRPCAddr)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -62,15 +65,17 @@ func main() {
 			}
 		}()
 	}
-	otpHandler := handler.NewOTPHandler(otpService)
-	mux := http.NewServeMux()
-	mux.HandleFunc("POST /v1/send-code", otpHandler.Send)
-	mux.HandleFunc("POST /v1/verify-code", otpHandler.Verify)
-	if config.WebDemo {
-		webHandler := web.New()
-		webHandler.Routes(mux)
-	}
-	if err := http.ListenAndServe(config.HTTPAddr, mux); err != nil {
-		log.Fatalln(err)
+	if len(config.HTTPAddr) > 0 {
+		otpHandler := handler.NewOTPHandler(otpService)
+		mux := http.NewServeMux()
+		mux.HandleFunc("POST /v1/send-code", otpHandler.Send)
+		mux.HandleFunc("POST /v1/verify-code", otpHandler.Verify)
+		if config.WebDemo {
+			webHandler := web.New()
+			webHandler.Routes(mux)
+		}
+		if err := http.ListenAndServe(config.HTTPAddr, mux); err != nil {
+			log.Fatal(err)
+		}
 	}
 }

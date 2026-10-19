@@ -30,10 +30,10 @@ TOKEN=<telegram gateway token>
 SECRET_KEY=<generated key>
 HTTP_PORT=8080
 REDIS_PASSWORD=<password>
-ESKIZ_EMAIL=<optional>
-ESKIZ_PASSWORD=<optional>
-WEB_DEMO=<optional>
-GRPC_ADDR=<optional>
+ESKIZ_EMAIL=<eskiz.uz email>
+ESKIZ_PASSWORD=<eskiz.uz password>
+WEB_DEMO=<demo page enbale flag>
+GRPC_ADDR=1111
 ```
 
 Start:
@@ -50,7 +50,7 @@ A demo page is served at `http://localhost:8080/`.
 |------------------|----------|-------------------------------------------------|
 | `TOKEN`          | yes      | Telegram Gateway API token                      |
 | `SECRET_KEY`     | yes      | HMAC key used to hash codes                     |
-| `HTTP_ADDR`      | yes      | Listen address, e.g. `:8080`                    |
+| `HTTP_ADDR`      | no      | Listen address, e.g. `:8080`                    |
 | `REDIS_ADDR`     | yes      | Redis/Valkey address, e.g. `valkey:6379`        |
 | `REDIS_PASSWORD` | no       | Redis/Valkey password                           |
 | `ESKIZ_EMAIL`    | no       | Eskiz account email. SMS fallback is disabled if empty |
