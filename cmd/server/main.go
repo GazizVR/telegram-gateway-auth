@@ -48,18 +48,20 @@ func main() {
 	})
 	redisStore := redis_otp.NewStore(rdb)
 	otpService := service.NewOTPService(telegramSender, smsSender, redisStore, redisStore, redisStore, []byte(config.SecretKey))
-	go func() {
-		service := server.NewOTPServiceServer(otpService)
-		ln, err := net.Listen("tcp", ":1234")
-		if err != nil {
-			log.Fatal(err)
-		}
-		server := grpc.NewServer()
-		otpservice.RegisterOTPServiceServer(server, service)
-		if err := server.Serve(ln); err != nil {
-			log.Fatal(err)
-		}
-	}()
+	if config.GRPCAddr != nil {
+		go func() {
+			service := server.NewOTPServiceServer(otpService)
+			ln, err := net.Listen("tcp", *config.GRPCAddr)
+			if err != nil {
+				log.Fatal(err)
+			}
+			server := grpc.NewServer()
+			otpservice.RegisterOTPServiceServer(server, service)
+			if err := server.Serve(ln); err != nil {
+				log.Fatal(err)
+			}
+		}()
+	}
 	otpHandler := handler.NewOTPHandler(otpService)
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/send-code", otpHandler.Send)

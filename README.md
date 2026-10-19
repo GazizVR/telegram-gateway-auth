@@ -33,6 +33,7 @@ REDIS_PASSWORD=<password>
 ESKIZ_EMAIL=<optional>
 ESKIZ_PASSWORD=<optional>
 WEB_DEMO=<optional>
+GRPC_ADDR=<optional>
 ```
 
 Start:
@@ -54,7 +55,8 @@ A demo page is served at `http://localhost:8080/`.
 | `REDIS_PASSWORD` | no       | Redis/Valkey password                           |
 | `ESKIZ_EMAIL`    | no       | Eskiz account email. SMS fallback is disabled if empty |
 | `ESKIZ_PASSWORD` | no       | Eskiz account password                          |
-| `WEB_DEMO` | no       | Demo page enable flag                          |
+| `WEB_DEMO` | no       | Demo page enable flag                         |
+| `GRPC_ADDR` | no       | GRPC socket                         |
 
 ## API
 

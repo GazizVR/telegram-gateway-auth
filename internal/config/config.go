@@ -5,11 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 )
 
 // Config holds the service settings read from the environment.
 //
-// Optional fields are WebDemo, RedisPassword, EskizEmail and EskizPassword.
+// Required fields are TOKEN, SECRET_KEY, HTTP_ADDR and REDIS_ADDR.
 // SMS fallback is disabled when either Eskiz field is empty.
 type Config struct {
 	Token         string
@@ -20,6 +21,7 @@ type Config struct {
 	EskizEmail    string
 	EskizPassword string
 	WebDemo       bool
+	GRPCAddr      *string
 }
 
 // Errors returned by Load for a missing required variable.
@@ -31,7 +33,7 @@ var (
 )
 
 // Load reads TOKEN, SECRET_KEY, HTTP_ADDR and REDIS_ADDR, which are required,
-// and WEB_DEMO, REDIS_PASSWORD, ESKIZ_EMAIL and ESKIZ_PASSWORD, which are optional.
+// and others are optional.
 // The returned error wraps the matching ErrMissing* value.
 func Load() (*Config, error) {
 	token := os.Getenv("TOKEN")
@@ -55,6 +57,11 @@ func Load() (*Config, error) {
 	if envWebDemo == "true" {
 		webDemo = true
 	}
+	var grpcAddr *string = nil
+	envGRPCAddr := os.Getenv("GRPC_ADDR")
+	if len(strings.TrimSpace(envGRPCAddr)) > 0 {
+		grpcAddr = &envGRPCAddr
+	}
 	return &Config{
 		Token:         token,
 		SecretKey:     secretKey,
@@ -64,5 +71,6 @@ func Load() (*Config, error) {
 		EskizEmail:    os.Getenv("ESKIZ_EMAIL"),
 		EskizPassword: os.Getenv("ESKIZ_PASSWORD"),
 		WebDemo:       webDemo,
+		GRPCAddr:      grpcAddr,
 	}, nil
 }

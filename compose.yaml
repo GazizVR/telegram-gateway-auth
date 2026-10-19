@@ -20,3 +20,4 @@ services:
       - ESKIZ_EMAIL=${ESKIZ_EMAIL}
       - ESKIZ_PASSWORD=${ESKIZ_PASSWORD}
       - WEB_DEMO=${WEB_DEMO}
+      - GRPC_ADDR=${GRPC_ADDR}
