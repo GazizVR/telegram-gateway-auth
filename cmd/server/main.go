@@ -52,7 +52,7 @@ func main() {
 	redisStore := redis_otp.NewStore(rdb)
 	otpService := service.NewOTPService(telegramSender, smsSender, redisStore, redisStore, redisStore, []byte(config.SecretKey))
 	if len(config.GRPCAddr) > 0 {
-		go func() {
+		runGRPC := func() {
 			service := server.NewOTPServiceServer(otpService)
 			ln, err := net.Listen("tcp", config.GRPCAddr)
 			if err != nil {
@@ -63,7 +63,12 @@ func main() {
 			if err := server.Serve(ln); err != nil {
 				log.Fatal(err)
 			}
-		}()
+		}
+		if len(config.HTTPAddr) > 0 {
+			go runGRPC()
+		} else {
+			runGRPC()
+		}
 	}
 	if len(config.HTTPAddr) > 0 {
 		otpHandler := handler.NewOTPHandler(otpService)
