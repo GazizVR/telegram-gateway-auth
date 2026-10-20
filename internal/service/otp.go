@@ -162,8 +162,8 @@ func (s *OTPService) Send(ctx context.Context, phone string) error {
 	return s.store.Set(ctx, phone, signHash([]byte(*code), s.secretKey), s.ttl)
 }
 
-func (s *OTPService) verifyCodeHash(code string, hash []byte) bool {
-	expected := signHash([]byte(code), s.secretKey)
+func verifyHash(message, hash, key []byte) bool {
+	expected := signHash(message, key)
 	return hmac.Equal(hash, expected)
 }
 
@@ -191,12 +191,12 @@ func (s *OTPService) Verify(ctx context.Context, phone, code string) error {
 		s.limiter.Release(ctx, phone)
 		return domain.ErrMaxAttemptsExceeded
 	}
-	if !s.verifyCodeHash(code, codeHash) {
+	if !verifyHash([]byte(code), codeHash, s.secretKey) {
 		return domain.ErrInvalidCode
 	}
 	return func() error {
-		err = s.store.Delete(ctx, phone)
-		err = s.limiter.Release(ctx, phone)
+        s.store.Delete(ctx, phone)
+		s.limiter.Release(ctx, phone)
 		return nil
 	}()
 }
