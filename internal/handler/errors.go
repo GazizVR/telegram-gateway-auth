@@ -1,14 +1,17 @@
 package handler
 
 import (
+	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 
 	"github.com/gazizvr/telegram-gateway-auth/internal/domain"
 )
 
-func handleError(w http.ResponseWriter, err error) {
+func handleError(ctx context.Context, w http.ResponseWriter, err error) {
+	slog.ErrorContext(ctx, err.Error())
 	var floodErr *domain.FloodWaitError
 	if errors.As(err, &floodErr) {
 		seconds := 0

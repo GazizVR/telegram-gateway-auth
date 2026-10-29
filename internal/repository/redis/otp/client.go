@@ -121,6 +121,7 @@ func (s *Store) Increment(ctx context.Context, phone string, ttl time.Duration) 
 	}
 	return int(cmd.Val()), nil
 }
+
 // Release resets the verification attempt counter for phone.
 func (s *Store) Release(ctx context.Context, phone string) error {
 	if err := s.rdb.Del(ctx, codeAttemptsKey(phone)).Err(); err != nil {
@@ -140,32 +141,29 @@ func hourlyCooldownKey(phone string) string {
 // CanSend returns a *domain.FloodWaitError if phone is in the one-minute
 // cooldown or has exceeded the hourly send limit.
 func (s *Store) CanSend(ctx context.Context, phone string) error {
-	attempts, err := s.rdb.Get(ctx, hourlyCooldownKey(phone)).Int()
+	script := redis.NewScript(`
+		local hourlyCooldownKey = KEYS[1]
+		local maxHourlyAttempts = tonumber(ARGV[1])
+		local attempts = tonumber(redis.call('GET',hourlyCooldownKey))
+		if attempts ~= nil and attempts > maxHourlyAttempts then
+			return tonumber(redis.call('TTL',hourlyCooldownKey))
+		end
+		local cooldownKey = KEYS[2]
+		local cooldown = redis.call('TTL',cooldownKey)
+		return tonumber(cooldown)
+	`)
+	ttl, err := script.Run(ctx, s.rdb, []string{hourlyCooldownKey(phone), cooldownKey(phone)}, s.maxHourlyAttempts).Int64()
 	if err != nil {
-		if !errors.Is(err, redis.Nil) {
-			return fmt.Errorf("can send: %w", err)
-		}
-	}
-	if attempts > s.maxHourlyAttempts {
-		if ttl, err := s.rdb.TTL(ctx, hourlyCooldownKey(phone)).Result(); err != nil {
-			return &domain.FloodWaitError{}
-		} else {
-			return &domain.FloodWaitError{
-				WaitTime: ttl,
-			}
-		}
-	}
-	ttl, err := s.rdb.TTL(ctx, cooldownKey(phone)).Result()
-	if err != nil {
-		return fmt.Errorf("can send: %w", err)
+		return err
 	}
 	if ttl > 0 {
 		return &domain.FloodWaitError{
-			WaitTime: ttl,
+			WaitTime: time.Duration(ttl) * time.Second,
 		}
 	}
 	return nil
 }
+
 // RecordSend starts the one-minute cooldown and counts the send
 // toward the hourly limit.
 func (s *Store) RecordSend(ctx context.Context, phone string) error {

@@ -47,7 +47,7 @@ func (h *OTPHandler) Send(
 
 	ctx := r.Context()
 	if err := h.src.Send(ctx, req.Phone); err != nil {
-		handleError(w, err)
+		handleError(r.Context(), w, err)
 		return
 	}
 
@@ -77,7 +77,7 @@ func (h *OTPHandler) Verify(
 
 	ctx := r.Context()
 	if err := h.src.Verify(ctx, req.Phone, req.Code); err != nil {
-		handleError(w, err)
+		handleError(r.Context(), w, err)
 		return
 	}
 
