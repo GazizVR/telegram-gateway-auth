@@ -1,14 +1,14 @@
 services:
   valkey:
     image: valkey/valkey:9.1-alpine
-    restart: on-failure:5
+    restart: unless-stopped
     environment:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
   app:
     build:
       context: .
       dockerfile: Dockerfile
-    restart: on-failure:5
+    restart: unless-stopped
     ports:
       - "${HTTP_PORT}:${HTTP_PORT}"
     environment:
